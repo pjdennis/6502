@@ -98,14 +98,8 @@ _over:
 	lda #>_1
 	sta cptr + 1
 	lda #_2 - _1
-	sta ccnt	
-_loop:
-	lda (cptr)
-	sta (dptr)
-	`incw cptr
-	`incw dptr
-	dec ccnt
-	bne _loop
+	sta ccnt
+	jsr copyCode
 .macend
 
 .org $8000
@@ -321,6 +315,17 @@ _stateModDptr:
 
 	rts
 .scend
+
+copyCode:
+_loop:
+	lda (cptr)
+	sta (dptr)
+	`incw cptr
+	`incw dptr
+	dec ccnt
+	bne _loop
+	
+	rts
 
 ;
 ; These secions of code function as the threaded code to execute programs.
