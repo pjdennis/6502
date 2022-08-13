@@ -322,8 +322,16 @@ stateToDefault:
 .scope
 	lda state
 	cmp #StateDefault
-	bne _stateModCell	
+	bne _stateCellCmp
 
+	rts
+
+_stateCellCmp:
+	cmp #StateCellCmp
+	bne _stateModCell
+
+	lda #StateDefault
+	sta state
 	rts
 
 _stateModCell:
@@ -360,9 +368,6 @@ _done:
 
 _stateModDptr:
 .scope
-	cmp #StateModDptr
-	bne _stateCellCmp
-
 	lda dptrDelta+1
 	bne _decrement
 	lda dptrDelta
@@ -416,10 +421,6 @@ _done:
 	sta state
 	rts
 .scend
-_stateCellCmp:
-	lda #StateDefault
-	sta state
-	rts
 .scend
 
 copyCode:
