@@ -46,7 +46,7 @@
 .org $0080		; we'll need to use ZP addressing
 .space dptr 2		; word to hold the data pointer.
 .space iptr 2		; word to hold the instruction pointer.
-.space temp 2		; word to hold popped PC for code generation.
+.space temp 2		; word to hold temporary pointer.
 .space fixup 2		; word to hold popped PC to fixup forward branch.
 .space cptr 2		; word to hold pointer for code to copy.
 .space ccnt 1		; byte to hold count of code to copy.
@@ -239,7 +239,8 @@ _leftBracket:
 	lda dptr
 	pha
 
-	`emitCode branchForward,branchForwardEnd	
+	`emitCode branchForward,branchForwardEnd
+
 	jmp _next
 
 _rightBracket:
@@ -248,25 +249,30 @@ _rightBracket:
 
 	pla		; get the return PC off the stack
 	sta fixup
-	sta temp
 	pla
 	sta fixup+1
+	
+	`addwbi fixup,branchForwardJumpInstruction-branchForward+1
+	
+	lda dptr
+	sta temp
+	lda dptr+1
 	sta temp+1
+	`addwbi temp,branchBackwardEnd-branchBackward
 	
-	`addwbi fixup, branchForwardJumpInstruction - branchForward + 1
-	
-	lda dptr	; fixup jump address for left bracket
+	lda temp	; fixup jump address for left bracket
 	sta (fixup)
 	`incw fixup
-	lda dptr+1
+	lda temp+1
 	sta (fixup)
+	`incw fixup
 
-	`emitCode branchBackward,branchBackwardJumpInstruction + 1
-	
-	lda temp	; store backwards jump address
+	`emitCode branchBackward,branchBackwardJumpInstruction+1
+
+	lda fixup	; store backwards jump address
 	sta (dptr)
 	`incw dptr
-	lda temp+1
+	lda fixup+1
 	sta (dptr)
 	`incw dptr
 
@@ -505,6 +511,7 @@ branchBackward:
 branchBackwardJumpInstruction:
 	jmp 0		; placeholder
 *
+branchBackwardEnd:
 
 debugOut:
 	brk		; unimplemented for now
