@@ -527,7 +527,6 @@ branchForwardAfterLoad:
 branchForwardJumpInstruction:
 	jmp 0		; placeholder
 *
-branchForwardEnd:
 
 branchBackward:
 	lda (dptr)
@@ -536,7 +535,6 @@ branchBackwardAfterLoad:
 branchBackwardJumpInstruction:
 	jmp 0		; placeholder
 *
-branchBackwardEnd:
 
 debugOut:
 	brk		; unimplemented for now
