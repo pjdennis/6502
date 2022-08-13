@@ -52,8 +52,7 @@
 .space cptr 2		; word to hold pointer for code to copy.
 .space ccnt 1		; byte to hold count of code to copy.
 .space state 1		; current parser state
-.space cellDelta 1	; cell delta
-.space dptrDelta 2	; dptr delta
+.space count 2		; count cell or dptr delta
 
 .data BSS
 .org $0300		; page 3 is used for uninitialized data.
@@ -149,9 +148,8 @@ compile:
 	lda #StateDefault
 	sta state
 	lda #0
-	sta cellDelta
-	sta dptrDelta
-	sta dptrDelta + 1
+	sta count
+	sta count + 1
 
 	; All programs start with memory cell initialization.
 	`emitCode initCells,initCellsEnd
@@ -173,7 +171,7 @@ _incCell:
 	jsr processState
 	lda #StateModCell
 	sta state
-*	inc cellDelta
+*	inc count
 	jmp _next
 
 _decCell:
@@ -185,7 +183,7 @@ _decCell:
 	jsr processState
 	lda #StateModCell
 	sta state
-*	dec cellDelta
+*	dec count
 	jmp _next
 
 _decDptr:
@@ -198,7 +196,7 @@ _decDptr:
 	jsr processState
 	lda #StateModDptr
 	sta state
-*	`decw dptrDelta
+*	`decw count
 	jmp _next
 
 _incDptr:
@@ -211,7 +209,7 @@ _incDptr:
 	jsr processState
 	lda #StateModDptr
 	sta state
-*	`incw dptrDelta
+*	`incw count
 	jmp _next
 
 _outputCell:
@@ -330,7 +328,7 @@ _stateModCell:
 	cmp #StateModCell
 	bne _stateModDptr
 	
-	lda cellDelta
+	lda count
 	cmp #$01
 	bne _decrement
 	; increment current cell
@@ -347,14 +345,14 @@ _decrement:
 _add:
 	; add to current cell
 	`emitCode modCell, modCellAdd+1
-	lda cellDelta
+	lda count
 	sta (dptr)
 	`incw dptr
 	`emitCode modCellAdd+2,modCellEnd
 	
 _done:
 	lda #0
-	sta cellDelta
+	sta count
 	lda #StateCellCmp
 	sta state
 	rts
@@ -362,11 +360,11 @@ _done:
 
 _stateModDptr:
 .scope
-	lda dptrDelta+1
+	lda count+1
 	bne _decrement
 
 	; Choose most efficient way of modifying data pointer
-	lda dptrDelta
+	lda count
 	cmp #$01
 	bne _addPosByte
 	; increment data pointer
@@ -376,18 +374,18 @@ _stateModDptr:
 _addPosByte:
 	; add positive value < 256 to data pointer
 	`emitCode addDptrPosByte,addDptrPosByteAdd+1
-	lda dptrDelta
+	lda count
 	sta (dptr)
 	`incw dptr
 	`emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
 	jmp _done
 
 _decrement:
-	lda dptrDelta+1
+	lda count+1
 	cmp #$ff
 	bne _add
 
-	lda dptrDelta
+	lda count
 	cmp #$ff
 	bne _addNegByte
 	; decrement data pointer
@@ -397,7 +395,7 @@ _decrement:
 _addNegByte:
 	; subract negative value >= -256 from data pointer
 	`emitCode addDptrNegByte,addDptrNegByteAdd+1
-	lda dptrDelta
+	lda count
 	sta (dptr)
 	`incw dptr
 	`emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
@@ -406,19 +404,19 @@ _addNegByte:
 _add:
 	; add signed value to data pointer
 	`emitCode modDptr,modDptrAddLow+1
-	lda dptrDelta
+	lda count
 	sta (dptr)
 	`incw dptr
 	`emitCode modDptrAddLow+2,modDptrAddHigh+1
-	lda dptrDelta+1
+	lda count+1
 	sta (dptr)
 	`incw dptr
 	`emitCode modDptrAddHigh+2,modDptrEnd
 
 _done:
 	lda #0
-	sta dptrDelta
-	sta dptrDelta + 1
+	sta count
+	sta count + 1
 	lda #StateDefault
 	sta state
 	rts
