@@ -261,6 +261,7 @@ _done:
 .scend
 
 _rightBracket:
+.scope
 	cmp #AscRB
 	bne _debugOut
 
@@ -268,12 +269,20 @@ _rightBracket:
 	sta fixup
 	pla
 	sta fixup+1
-	
+
+	lda state
+	cmp #StateCellCmp
+	beq _skipLoad
+	`emitCode branchBackward,branchBackwardJumpInstruction+1
+	jmp _done
+_skipLoad:
+	`emitCode branchBackwardNoLoad,branchBackwardJumpInstruction+1
+_done:
 	lda dptr
 	sta temp
 	lda dptr+1
 	sta temp+1
-	`addwbi temp,branchBackwardEnd-branchBackward
+	`addwbi temp,2
 	
 	lda temp	; fixup jump address for left bracket
 	sta (fixup)
@@ -281,8 +290,6 @@ _rightBracket:
 	lda temp+1
 	sta (fixup)
 	`incw fixup
-
-	`emitCode branchBackward,branchBackwardJumpInstruction+1
 
 	lda fixup	; store backwards jump address
 	sta (dptr)
@@ -294,6 +301,7 @@ _rightBracket:
 	lda #StateDefault
 	sta state
 	jmp _next
+.scend
 
 _debugOut:
 	cmp #AscQues
@@ -534,6 +542,7 @@ branchForwardEnd:
 
 branchBackward:
 	lda (dptr)
+branchBackwardNoLoad:
 	beq +		; Branch on data cell containing zero
 branchBackwardJumpInstruction:
 	jmp 0		; placeholder
