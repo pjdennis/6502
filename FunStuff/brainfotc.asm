@@ -96,7 +96,7 @@ _over:
 	lda #<_1
 	sta cptr
 	lda #>_1
-	sta cptr + 1
+	sta cptr+1
 	lda #_2 - _1
 	sta ccnt
 	jsr copyCode
@@ -149,7 +149,7 @@ compile:
 	sta state
 	lda #0
 	sta count
-	sta count + 1
+	sta count+1
 
 	; All programs start with memory cell initialization.
 	`emitCode initCells,initCellsEnd
@@ -416,7 +416,7 @@ _add:
 _done:
 	lda #0
 	sta count
-	sta count + 1
+	sta count+1
 	lda #StateDefault
 	sta state
 	rts
@@ -516,10 +516,10 @@ modDptr:
 modDptrAddLow:
 	adc #0		; placeholder
 	sta dptr
-	lda dptr + 1
+	lda dptr+1
 modDptrAddHigh:
 	adc #0		; placeholder
-	sta dptr + 1
+	sta dptr+1
 modDptrEnd:
 
 outputCell:
