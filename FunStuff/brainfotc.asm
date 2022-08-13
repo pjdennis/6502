@@ -327,6 +327,22 @@ _done:
 
 _stateModDptr:
 .scope
+	lda dptrDelta
+	cmp #$01
+	bne _decrement
+	lda dptrDelta+1
+	bne _decrement
+	`emitCode incDptr,incDptrEnd
+	jmp _done
+	
+_decrement:
+	lda dptrDelta
+	cmp #$ff
+	bne _add
+	lda dptrDelta+1
+	bne _add
+	`emitCode decDptr,decDptrEnd
+	jmp _done
 
 _add:
 	`emitCode modDptr,modDptrAddLow+1
