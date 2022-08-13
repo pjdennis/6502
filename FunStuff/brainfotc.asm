@@ -32,10 +32,10 @@
 .alias AscLB	$5B
 .alias AscRB	$5D
 
-.alias StateDefault	$00
-.alias StateModCell	$01
-.alias StateModDptr	$02
-.alias StateCellCmp	$03
+.alias StateDefault	$00	; Nothing pending
+.alias StateModCell	$01	; Collecting cell increments into delta
+.alias StateModDptr	$02	; Collecting pointer increments into delta
+.alias StateCellCmp	$03	; Current cell loaded for branch on Z flag
 
 .alias cellsSize [cellsEnd - cells]
 .alias codeSize [codeEnd - code]
@@ -145,6 +145,7 @@ compile:
 	lda #>code
 	sta dptr+1
 	
+	; Initialize parser state
 	lda #StateDefault
 	sta state
 	lda #0
@@ -214,6 +215,7 @@ _incDptr:
 	jmp _next
 
 _outputCell:
+	; no longer collecting increments so emit any pending code
 	pha
 	jsr processState
 	pla
@@ -269,7 +271,8 @@ _rightBracket:
 	beq +
 	`emitCode branchBackward,branchBackwardAfterLoad
 *	`emitCode branchBackwardAfterLoad,branchBackwardJumpInstruction+1
-	lda dptr
+
+	lda dptr	; address of next instruction into temp
 	sta temp
 	lda dptr+1
 	sta temp+1
@@ -302,7 +305,7 @@ _debugOut:
 	sta state
 	jmp _next
 
-_ignoreInput:		;  All other characters are ignored.
+_ignoreInput:		; all other characters are ignored
 
 _next:	`incw iptr
 	jmp _while
@@ -330,16 +333,19 @@ _stateModCell:
 	lda cellDelta
 	cmp #$01
 	bne _decrement
+	; increment current cell
 	`emitCode incCell,incCellEnd
 	jmp _done
 	
 _decrement:
 	cmp #$ff
 	bne _add
+	; decrement current cell
 	`emitCode decCell,decCellEnd
 	jmp _done
 
 _add:
+	; add to current cell
 	`emitCode modCell, modCellAdd+1
 	lda cellDelta
 	sta (dptr)
@@ -358,13 +364,17 @@ _stateModDptr:
 .scope
 	lda dptrDelta+1
 	bne _decrement
+
+	; Choose most efficient way of modifying data pointer
 	lda dptrDelta
 	cmp #$01
 	bne _addPosByte
+	; increment data pointer
 	`emitCode incDptr,incDptrEnd
 	jmp _done
 
 _addPosByte:
+	; add positive value < 256 to data pointer
 	`emitCode addDptrPosByte,addDptrPosByteAdd+1
 	lda dptrDelta
 	sta (dptr)
@@ -376,13 +386,16 @@ _decrement:
 	lda dptrDelta+1
 	cmp #$ff
 	bne _add
+
 	lda dptrDelta
 	cmp #$ff
 	bne _addNegByte
+	; decrement data pointer
 	`emitCode decDptr,decDptrEnd
 	jmp _done
 
 _addNegByte:
+	; subract negative value >= -256 from data pointer
 	`emitCode addDptrNegByte,addDptrNegByteAdd+1
 	lda dptrDelta
 	sta (dptr)
@@ -391,6 +404,7 @@ _addNegByte:
 	jmp _done
 
 _add:
+	; add signed value to data pointer
 	`emitCode modDptr,modDptrAddLow+1
 	lda dptrDelta
 	sta (dptr)
