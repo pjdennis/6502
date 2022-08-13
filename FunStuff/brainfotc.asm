@@ -331,25 +331,34 @@ _stateModDptr:
 	bne _decrement
 	lda dptrDelta
 	cmp #$01
-	bne _addByte
+	bne _addPosByte
 	`emitCode incDptr,incDptrEnd
 	jmp _done
 
-_addByte:
-	`emitCode addDptrByte,addDptrByteAdd+1
+_addPosByte:
+	`emitCode addDptrPosByte,addDptrPosByteAdd+1
 	lda dptrDelta
 	sta (dptr)
 	`incw dptr
-	`emitCode addDptrByteAdd+2,addDptrByteEnd
+	`emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
 	jmp _done
 
 _decrement:
-	lda dptrDelta
+	lda dptrDelta+1
 	cmp #$ff
 	bne _add
-	lda dptrDelta+1
-	bne _add
+	lda dptrDelta
+	cmp #$ff
+	bne _addNegByte
 	`emitCode decDptr,decDptrEnd
+	jmp _done
+
+_addNegByte:
+	`emitCode addDptrNegByte,addDptrNegByteAdd+1
+	lda dptrDelta
+	sta (dptr)
+	`incw dptr
+	`emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
 	jmp _done
 
 _add:
@@ -438,16 +447,27 @@ incDptr:
 	`incw dptr
 incDptrEnd:
 
-addDptrByte:
+addDptrNegByte:
 	clc
 	lda dptr
-addDptrByteAdd:
+addDptrNegByteAdd:
+	adc #0		;placeholder
+	sta dptr
+	bcs +
+	dec dptr+1
+*
+addDptrNegByteEnd:
+
+addDptrPosByte:
+	clc
+	lda dptr
+addDptrPosByteAdd:
 	adc #0		; placeholder
 	sta dptr
 	bcc +
 	inc dptr+1
 *
-addDptrByteEnd:
+addDptrPosByteEnd:
 
 modDptr:
 	clc
