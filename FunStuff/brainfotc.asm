@@ -288,17 +288,34 @@ stateToDefault:
 	rts
 
 _stateModCell:
+.scope
 	cmp #StateModCell
 	bne _stateModDptr
+	
+	lda cellDelta
+	cmp #$01
+	bne _decrement
+	`emitCode incCell,incCellEnd
+	jmp _done
+	
+_decrement:
+	cmp #$ff
+	bne _add
+	`emitCode decCell,decCellEnd
+	jmp _done
 
+_add:
 	`emitCode modCell, modCellAdd+1
 	lda cellDelta
 	sta (dptr)
 	`incw dptr
 	`emitCode modCellAdd+2,modCellEnd
+	
+_done:
 	lda #0
 	sta cellDelta
 	rts
+.scend
 
 _stateModDptr:
 
@@ -337,6 +354,12 @@ incCell:
 	sta (dptr)
 incCellEnd:
 
+decCell:
+	lda (dptr)
+	dec
+	sta (dptr)
+decCellEnd:
+
 modCell:
 	clc
 	lda (dptr)
@@ -344,12 +367,6 @@ modCellAdd:
 	adc #0		; placeholder
 	sta (dptr)
 modCellEnd:
-
-decCell:
-	lda (dptr)
-	dec
-	sta (dptr)
-decCellEnd:
 
 decDptr:
 	`decw dptr
