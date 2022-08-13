@@ -35,6 +35,7 @@
 .alias StateDefault	$00
 .alias StateModCell	$01
 .alias StateModDptr	$02
+.alias StateCellCmp	$03
 
 .alias cellsSize [cellsEnd - cells]
 .alias codeSize [codeEnd - code]
@@ -221,6 +222,8 @@ _outputCell:
 	bne _inputCell
 
 	`emitCode outputCell,outputCellEnd
+	lda #StateDefault
+	sta state
 	jmp _next
 
 _inputCell:
@@ -228,31 +231,43 @@ _inputCell:
 	bne _leftBracket
 
 	`emitCode incCell,inputCellEnd
+	lda #StateDefault
+	sta state
 	jmp _next
 
 _leftBracket:
+.scope
 	cmp #AscLB
 	bne _rightBracket
-
+	
+	lda state
+	cmp #StateCellCmp
+	beq _skipLoad
+	`emitCode branchForward,branchForwardJumpInstruction+1
+	jmp _done
+_skipLoad:
+	`emitCode branchForwardNoLoad,branchForwardJumpInstruction+1
+_done:
 	lda dptr+1	; push current PC for later.
 	pha
 	lda dptr
 	pha
+	
+	`addwbi dptr, 2	; skip past reserved space for jump address
 
-	`emitCode branchForward,branchForwardEnd
-
+	lda #StateDefault
+	sta state
 	jmp _next
+.scend
 
 _rightBracket:
 	cmp #AscRB
 	bne _debugOut
 
-	pla		; get the return PC off the stack
+	pla		; get the fixup address off the stack
 	sta fixup
 	pla
 	sta fixup+1
-	
-	`addwbi fixup,branchForwardJumpInstruction-branchForward+1
 	
 	lda dptr
 	sta temp
@@ -276,6 +291,8 @@ _rightBracket:
 	sta (dptr)
 	`incw dptr
 
+	lda #StateDefault
+	sta state
 	jmp _next
 
 _debugOut:
@@ -283,6 +300,8 @@ _debugOut:
 	bne _ignoreInput
 
 	`emitCode debugOut,debugOutEnd
+	lda #StateDefault
+	sta state
 	jmp _next
 
 _ignoreInput:		;  All other characters are ignored.
@@ -326,13 +345,16 @@ _add:
 _done:
 	lda #0
 	sta cellDelta
-	lda #StateDefault
+	lda #StateCellCmp
 	sta state
 	rts
 .scend
 
 _stateModDptr:
 .scope
+	cmp #StateModDptr
+	bne _stateCellCmp
+
 	lda dptrDelta+1
 	bne _decrement
 	lda dptrDelta
@@ -386,6 +408,10 @@ _done:
 	sta state
 	rts
 .scend
+_stateCellCmp:
+	lda #StateDefault
+	sta state
+	rts
 .scend
 
 copyCode:
@@ -499,6 +525,7 @@ inputCellEnd:
 
 branchForward:
 	lda (dptr)
+branchForwardNoLoad:
 	bne +		; Branch on data cell containing zero
 branchForwardJumpInstruction:
 	jmp 0		; placeholder
