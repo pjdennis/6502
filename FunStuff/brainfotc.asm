@@ -187,24 +187,36 @@ _decCell:
 	jmp _next
 
 _decDptr:
-	pha
-	jsr stateToDefault
-	pla
-
 	cmp #AscLT
 	bne _incDptr
 
-	`emitCode decDptr,decDptrEnd
+	lda state
+	cmp #StateModDptr
+	beq +
+	jsr stateToDefault
+	lda #StateModDptr
+	sta state
+*	`decw dptrDelta
 	jmp _next
 
 _incDptr:
 	cmp #AscGT
 	bne _outputCell
 
-	`emitCode incDptr,incDptrEnd
+	lda state
+	cmp #StateModDptr
+	beq +
+	jsr stateToDefault
+	lda #StateModDptr
+	sta state
+*	`incw dptrDelta
 	jmp _next
 
 _outputCell:
+	pha
+	jsr stateToDefault
+	pla
+
 	cmp #AscDot
 	bne _inputCell
 
@@ -308,12 +320,33 @@ _add:
 _done:
 	lda #0
 	sta cellDelta
+	lda #StateDefault
+	sta state
 	rts
 .scend
 
 _stateModDptr:
+.scope
 
+_add:
+	`emitCode modDptr,modDptrAddLow+1
+	lda dptrDelta
+	sta (dptr)
+	`incw dptr
+	`emitCode modDptrAddLow+2,modDptrAddHigh+1
+	lda dptrDelta+1
+	sta (dptr)
+	`incw dptr
+	`emitCode modDptrAddHigh+2,modDptrEnd
+
+_done:
+	lda #0
+	sta dptrDelta
+	sta dptrDelta + 1
+	lda #StateDefault
+	sta state
 	rts
+.scend
 .scend
 
 copyCode:
@@ -380,6 +413,18 @@ decDptrEnd:
 incDptr:
 	`incw dptr
 incDptrEnd:
+
+modDptr:
+	clc
+	lda dptr
+modDptrAddLow:
+	adc #0		; placeholder
+	sta dptr
+	lda dptr + 1
+modDptrAddHigh:
+	adc #0		; placeholder
+	sta dptr + 1
+modDptrEnd:
 
 outputCell:
 	lda (dptr)
