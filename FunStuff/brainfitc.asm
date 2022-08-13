@@ -109,11 +109,11 @@ _loop:
 ;
 main:
 	; Set the instruction pointer to the classic hello world program.
-	;lda #<helloWorld
-	;sta iptr
-	;lda #>helloWorld
-	;sta iptr+1
-	;jsr runProgram
+	lda #<helloWorld
+	sta iptr
+	lda #>helloWorld
+	sta iptr+1
+	jsr runProgram
 
 	; set the instruction pointer to the Sierpinski triangle program.
 	lda #<sierpinski
@@ -123,11 +123,11 @@ main:
 	jsr runProgram
 
 	; set the instruction pointer to the Golden ratio program.
-	;lda #<golden
-	;sta iptr
-	;lda #>golden
-	;sta iptr+1
-	;jsr runProgram
+	lda #<golden
+	sta iptr
+	lda #>golden
+	sta iptr+1
+	jsr runProgram
 	brk
 
 runProgram:
