@@ -112,11 +112,11 @@ _over:
 ;
 main:
 	; Set the instruction pointer to the classic hello world program.
-	;lda #<helloWorld
-	;sta iptr
-	;lda #>helloWorld
-	;sta iptr+1
-	;jsr runProgram
+	lda #<helloWorld
+	sta iptr
+	lda #>helloWorld
+	sta iptr+1
+	jsr runProgram
 
 	; set the instruction pointer to the Sierpinski triangle program.
 	lda #<sierpinski
@@ -126,11 +126,11 @@ main:
 	jsr runProgram
 
 	; set the instruction pointer to the Golden ratio program.
-	;lda #<golden
-	;sta iptr
-	;lda #>golden
-	;sta iptr+1
-	;jsr runProgram
+	lda #<golden
+	sta iptr
+	lda #>golden
+	sta iptr+1
+	jsr runProgram
 	brk
 
 runProgram:
@@ -158,7 +158,7 @@ compile:
 _while:	lda (iptr)
 	bne _incCell
 
-	jsr stateToDefault
+	jsr processState
 	`emitCode endProgram,endProgramEnd
 	rts
 
@@ -169,7 +169,7 @@ _incCell:
 	lda state
 	cmp #StateModCell
 	beq +
-	jsr stateToDefault
+	jsr processState
 	lda #StateModCell
 	sta state
 *	inc cellDelta
@@ -181,7 +181,7 @@ _decCell:
 
 	cmp #StateModCell
 	beq +
-	jsr stateToDefault
+	jsr processState
 	lda #StateModCell
 	sta state
 *	dec cellDelta
@@ -194,7 +194,7 @@ _decDptr:
 	lda state
 	cmp #StateModDptr
 	beq +
-	jsr stateToDefault
+	jsr processState
 	lda #StateModDptr
 	sta state
 *	`decw dptrDelta
@@ -207,7 +207,7 @@ _incDptr:
 	lda state
 	cmp #StateModDptr
 	beq +
-	jsr stateToDefault
+	jsr processState
 	lda #StateModDptr
 	sta state
 *	`incw dptrDelta
@@ -215,7 +215,7 @@ _incDptr:
 
 _outputCell:
 	pha
-	jsr stateToDefault
+	jsr processState
 	pla
 
 	cmp #AscDot
@@ -251,7 +251,7 @@ _leftBracket:
 	
 	`addwbi dptr, 2	; skip past reserved space for jump address
 
-	lda #StateDefault
+	lda #StateCellCmp
 	sta state
 	jmp _next
 
@@ -289,7 +289,7 @@ _rightBracket:
 	sta (dptr)
 	`incw dptr
 
-	lda #StateDefault
+	lda #StateCellCmp
 	sta state
 	jmp _next
 
@@ -308,7 +308,7 @@ _next:	`incw iptr
 	jmp _while
 .scend
 
-stateToDefault:
+processState:
 .scope
 	lda state
 	cmp #StateDefault
@@ -320,8 +320,6 @@ _stateCellCmp:
 	cmp #StateCellCmp
 	bne _stateModCell
 
-	lda #StateDefault
-	sta state
 	rts
 
 _stateModCell:
