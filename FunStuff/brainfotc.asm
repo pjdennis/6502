@@ -236,18 +236,14 @@ _inputCell:
 	jmp _next
 
 _leftBracket:
-.scope
 	cmp #AscLB
 	bne _rightBracket
 	
 	lda state
 	cmp #StateCellCmp
-	beq _skipLoad
-	`emitCode branchForward,branchForwardJumpInstruction+1
-	jmp _done
-_skipLoad:
-	`emitCode branchForwardNoLoad,branchForwardJumpInstruction+1
-_done:
+	beq +
+	`emitCode branchForward,branchForwardAfterLoad
+*	`emitCode branchForwardAfterLoad,branchForwardJumpInstruction+1
 	lda dptr+1	; push current PC for later.
 	pha
 	lda dptr
@@ -258,10 +254,8 @@ _done:
 	lda #StateDefault
 	sta state
 	jmp _next
-.scend
 
 _rightBracket:
-.scope
 	cmp #AscRB
 	bne _debugOut
 
@@ -272,12 +266,9 @@ _rightBracket:
 
 	lda state
 	cmp #StateCellCmp
-	beq _skipLoad
-	`emitCode branchBackward,branchBackwardJumpInstruction+1
-	jmp _done
-_skipLoad:
-	`emitCode branchBackwardNoLoad,branchBackwardJumpInstruction+1
-_done:
+	beq +
+	`emitCode branchBackward,branchBackwardAfterLoad
+*	`emitCode branchBackwardAfterLoad,branchBackwardJumpInstruction+1
 	lda dptr
 	sta temp
 	lda dptr+1
@@ -301,7 +292,6 @@ _done:
 	lda #StateDefault
 	sta state
 	jmp _next
-.scend
 
 _debugOut:
 	cmp #AscQues
@@ -534,7 +524,7 @@ inputCellEnd:
 
 branchForward:
 	lda (dptr)
-branchForwardNoLoad:
+branchForwardAfterLoad:
 	bne +		; Branch on data cell containing zero
 branchForwardJumpInstruction:
 	jmp 0		; placeholder
@@ -543,7 +533,7 @@ branchForwardEnd:
 
 branchBackward:
 	lda (dptr)
-branchBackwardNoLoad:
+branchBackwardAfterLoad:
 	beq +		; Branch on data cell containing zero
 branchBackwardJumpInstruction:
 	jmp 0		; placeholder
