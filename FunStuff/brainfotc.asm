@@ -32,6 +32,10 @@
 .alias AscLB	$5B
 .alias AscRB	$5D
 
+.alias InstBNE	$D0
+.alias InstBEQ	$F0
+.alias InstJMP	$4C
+
 .alias StateDefault	$00	; Nothing pending
 .alias StateModCell	$01	; Collecting cell increments into delta
 .alias StateModDptr	$02	; Collecting pointer increments into delta
@@ -303,7 +307,7 @@ _stateSeqOpen:
 	; check if current cell value already loaded for Z flag check
 	lda cellCmpValid
 	bne +
-	`emitCode branchForward,branchForwardAfterLoad
+	`emitCode loadCellValue,loadCellValueEnd
 *
 	; find minimum of count and BraceCntForBranch
 	lda count+1
@@ -324,10 +328,10 @@ _atMax:
 	adc #$100-2
 	sta distance
 _loop:
-*	`emitCode branchForwardAfterLoad,branchForwardAfterLoad+1
+	lda #InstBNE
+	jsr emitByte
 	lda distance
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	
 	lda count+1
 	bne _branchOffsetGood
@@ -341,7 +345,8 @@ _loop:
 	sta distance
 
 _branchOffsetGood:
-	`emitCode branchForwardJumpInstruction,branchForwardJumpInstruction+1
+	lda #InstJMP
+	jsr emitByte
 
 	lda dptr+1	; push current PC for later.
 	sta (fixupStack)
@@ -377,7 +382,7 @@ _stateSeqClose:
 *
 	lda cellCmpValid
 	bne +
-	`emitCode branchBackward,branchBackwardAfterLoad
+	`emitCode loadCellValue,loadCellValueEnd
 *
 	; find minimum of count and BraceCntForBranch
 	lda count+1
@@ -398,11 +403,11 @@ _atMax:
 	adc #$100-2
 	sta distance
 _loop:
-	`emitCode branchBackwardAfterLoad,branchBackwardAfterLoad+1
+	lda #InstBEQ
+	jsr emitByte
 	lda distance
-	sta (dptr)
-	`incw dptr
-	
+	jsr emitByte
+
 	lda count+1
 	bne _branchOffsetGood
 	lda #BraceCntForBranch
@@ -415,7 +420,8 @@ _loop:
 	sta distance
 
 _branchOffsetGood:
-	`emitCode branchBackwardJumpInstruction,branchBackwardJumpInstruction+1	
+	lda #InstJMP
+	jsr emitByte
 
 	; get the fixup address off the fixup stack
 	`decw fixupStack
@@ -439,11 +445,9 @@ _branchOffsetGood:
 	`incw fixup
 
 	lda fixup	; store backwards jump address
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	lda fixup+1
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	
 	; decrement count and loop if not zero
         lda count
@@ -484,8 +488,7 @@ _add:
 	; add to current cell
 	`emitCode modCell, modCellAdd+1
 	lda count
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	`emitCode modCellAdd+2,modCellEnd
 	
 _done:
@@ -515,8 +518,7 @@ _addPosByte:
 	; add positive value < 256 to data pointer
 	`emitCode addDptrPosByte,addDptrPosByteAdd+1
 	lda count
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	`emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
 	jmp _done
 
@@ -536,8 +538,7 @@ _addNegByte:
 	; subract negative value >= -256 from data pointer
 	`emitCode addDptrNegByte,addDptrNegByteAdd+1
 	lda count
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	`emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
 	jmp _done
 
@@ -545,12 +546,10 @@ _add:
 	; add signed value to data pointer
 	`emitCode modDptr,modDptrAddLow+1
 	lda count
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	`emitCode modDptrAddLow+2,modDptrAddHigh+1
 	lda count+1
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	`emitCode modDptrAddHigh+2,modDptrEnd
 
 _done:
@@ -573,8 +572,12 @@ _loop:
 	`incw dptr
 	dec ccnt
 	bne _loop
-	
 	rts
+
+emitByte:
+	sta (dptr)
+	`incw dptr
+	rts;
 
 ;
 ; These secions of code function as the threaded code to execute programs.
@@ -674,21 +677,9 @@ inputCell:
 	sta (dptr)
 inputCellEnd:
 
-branchForward:
+loadCellValue:
 	lda (dptr)
-branchForwardAfterLoad:
-	bne +		; Branch on data cell containing zero
-branchForwardJumpInstruction:
-	jmp 0		; placeholder
-*
-
-branchBackward:
-	lda (dptr)
-branchBackwardAfterLoad:
-	beq +		; Branch on data cell containing zero
-branchBackwardJumpInstruction:
-	jmp 0		; placeholder
-*
+loadCellValueEnd:
 
 debugOut:
 	brk		; unimplemented for now
