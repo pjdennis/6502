@@ -38,7 +38,7 @@
 .alias StateSeqOpen	$03	; Collecting sequence of open brackets
 .alias StateSeqClose	$04	; Collecting sequence of close brackets
 
-.alias OpenCntForBranch	25	; 25 * 5 instructions - 2 <= 127
+.alias BraceCntForBranch	25	; 25 * 5 instructions - 2 <= 127
 
 .alias cellsSize [cellsEnd - cells]
 .alias codeSize [codeEnd - code]
@@ -314,17 +314,17 @@ _stateSeqOpen:
 	pla
 	sta temp+1
 
-	; find minimum of count and OpenCntForBranch
+	; find minimum of count and BraceCntForBranch
 	lda count+1
 	bne _atMax
-	lda #OpenCntForBranch
+	lda #BraceCntForBranch
 	cmp count
 	bcc _atMax
 	; use count
 	lda count
 	bcs +
 _atMax:
-	lda #OpenCntForBranch
+	lda #BraceCntForBranch
 *	sta distance	; distance = count*5-2
 	asl
 	asl
@@ -341,7 +341,7 @@ _loop:
 	
 	lda count+1
 	bne _branchOffsetGood
-	lda #OpenCntForBranch
+	lda #BraceCntForBranch
 	cmp count
 	bcc _branchOffsetGood
 	
