@@ -61,7 +61,7 @@
 .space ccnt 1		; byte to hold count of code to copy.
 .space state 1		; current parser state
 .space cellCmpValid 1	; current cell loaded for branch on Z flag?
-.space count 2		; count cell or dptr delta
+.space count 2		; cell or dptr delta or bracket count
 .space distance 1	; distance for relative branch
 
 .data BSS
@@ -370,7 +370,6 @@ _branchOffsetGood:
 	sta cellCmpValid
 	lda #StateDefault
 	sta state
-
 	rts	
 .scend
 
@@ -556,7 +555,6 @@ _done:
 	lda #0
 	sta count
 	sta count+1
-	lda #0
 	sta cellCmpValid
 	lda #StateDefault
 	sta state
