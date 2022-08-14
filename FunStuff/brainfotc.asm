@@ -9,8 +9,18 @@
 ; This version of the Brain f--k compiler compiles programs into 6502 machine
 ; code. When executed the machine code uses the underlying hardware as the code
 ; threading mechanism. Eliminating function calls creates a faster Brain f--k
-; impementation than the prior versions. Optimizations further increase the
-; speed.
+; impementation than the prior versions.
+;
+; These optimizations further increase the speed:
+; * Multiple consecutive increments/decrements to cell values or to the data
+;   pointer are consolidated into a single addition. The most efficient way of
+;   updating the cell value or pointer is chosen based on the magnatude of the
+;   consolidated value
+; * Multiple consecutive [ or ] commands are consolidated so that flow of
+;   control jumps directly past the group of commands vs. retesting the same
+;   condition multiple times
+; * The compiler keeps track of when the current cell value is reflected in the
+;   Z flag so as to avoid reloading the current cell value unnecessarily
 ;
 ; Derived from prior version by Martin Heermance <mheermance@gmail.com>
 ;
