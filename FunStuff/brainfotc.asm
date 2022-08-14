@@ -36,6 +36,7 @@
 .alias StateModCell	$01	; Collecting cell increments into delta
 .alias StateModDptr	$02	; Collecting pointer increments into delta
 .alias StateSeqOpen	$03	; Collecting sequence of open brackets
+.alias StateSeqClose	$04	; Collecting sequence of close brackets
 
 .alias OpenCntForBranch	25	; 25 * 5 instructions - 2 <= 127
 
@@ -50,12 +51,14 @@
 .space dptr 2		; word to hold the data pointer.
 .space iptr 2		; word to hold the instruction pointer.
 .space temp 2		; word to hold temporary pointer.
+.space temp2 2		; word to hold temporary pointer.
 .space fixup 2		; word to hold popped PC to fixup forward branch.
 .space cptr 2		; word to hold pointer for code to copy.
 .space ccnt 1		; byte to hold count of code to copy.
 .space state 1		; current parser state
 .space cellCmpValid 1	; current cell loaded for branch on Z flag?
 .space count 2		; count cell or dptr delta
+.space distance 1	; distance for relative branch
 
 .data BSS
 .org $0300		; page 3 is used for uninitialized data.
@@ -260,40 +263,14 @@ _leftBracket:
 _rightBracket:
 	cmp #AscRB
 	bne _debugOut
-
-	jsr processState
-	lda cellCmpValid
-	bne +
-	`emitCode branchBackward,branchBackwardAfterLoad
-*	`emitCode branchBackwardAfterLoad,branchBackwardJumpInstruction+1
-
-	pla		; get the fixup address off the stack
-	sta fixup
-	pla
-	sta fixup+1
-
-	lda dptr	; address of next instruction into temp
-	sta temp
-	lda dptr+1
-	sta temp+1
-	`addwbi temp,2
 	
-	lda temp	; fixup jump address for left bracket
-	sta (fixup)
-	`incw fixup
-	lda temp+1
-	sta (fixup)
-	`incw fixup
-
-	lda fixup	; store backwards jump address
-	sta (dptr)
-	`incw dptr
-	lda fixup+1
-	sta (dptr)
-	`incw dptr
-
-	lda #1
-	sta cellCmpValid
+	lda state
+	cmp #StateSeqClose
+	beq +
+	jsr processState
+	lda #StateSeqClose
+	sta state
+*	`incw count
 	jmp _next
 
 _debugOut:
@@ -324,7 +301,7 @@ _stateSeqOpen:
 .scope
 	cmp #StateSeqOpen
 	beq +
-	jmp _stateModCell
+	jmp _stateSeqClose
 *
 	; check if current cell value already loaded for Z flag check
 	lda cellCmpValid
@@ -348,17 +325,17 @@ _stateSeqOpen:
 	bcs +
 _atMax:
 	lda #OpenCntForBranch
-*	sta fixup	; fixup = count*5-2
+*	sta distance	; distance = count*5-2
 	asl
 	asl
 	clc
-	adc fixup
+	adc distance
 	adc #$100-2
-	sta fixup
+	sta distance
 
 _loop:
 *	`emitCode branchForwardAfterLoad,branchForwardAfterLoad+1
-	lda fixup
+	lda distance
 	sta (dptr)
 	`incw dptr
 	
@@ -369,9 +346,9 @@ _loop:
 	bcc _branchOffsetGood
 	
 	clc
-	lda fixup
+	lda distance
 	adc #$100-5
-	sta fixup
+	sta distance
 
 _branchOffsetGood:
 	`emitCode branchForwardJumpInstruction,branchForwardJumpInstruction+1
@@ -404,6 +381,72 @@ _branchOffsetGood:
 	sta state
 
 	rts	
+.scend
+
+_stateSeqClose:
+.scope
+	cmp #StateSeqClose
+	beq +
+	jmp _stateModCell
+*
+	lda cellCmpValid
+	bne +
+	`emitCode branchBackward,branchBackwardAfterLoad
+*
+	; remove and save return address from stack
+	pla
+	sta temp2
+	pla
+	sta temp2+1
+
+_loop:
+	`emitCode branchBackwardAfterLoad,branchBackwardJumpInstruction+1
+
+	pla		; get the fixup address off the stack
+	sta fixup
+	pla
+	sta fixup+1
+
+	lda dptr	; address of next instruction into temp
+	sta temp
+	lda dptr+1
+	sta temp+1
+	`addwbi temp,2
+	
+	lda temp	; fixup jump address for left bracket
+	sta (fixup)
+	`incw fixup
+	lda temp+1
+	sta (fixup)
+	`incw fixup
+
+	lda fixup	; store backwards jump address
+	sta (dptr)
+	`incw dptr
+	lda fixup+1
+	sta (dptr)
+	`incw dptr
+	
+	; decrement count and loop if not zero
+        lda count
+        bne +
+        dec count+1
+*	dec count
+	bne _loop
+	lda count+1
+	bne _loop
+
+	; put return address back on stack
+	lda temp2+1
+	pha
+	lda temp2
+	pha
+
+	lda #1
+	sta cellCmpValid
+	lda #StateDefault
+	sta state
+	rts
 .scend
 
 _stateModCell:
