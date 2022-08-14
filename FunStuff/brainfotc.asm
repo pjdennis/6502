@@ -37,6 +37,8 @@
 .alias StateModDptr	$02	; Collecting pointer increments into delta
 .alias StateSeqOpen	$03	; Collecting sequence of open brackets
 
+.alias OpenCntForBranch	25	; 25 * 5 instructions - 2 <= 127
+
 .alias cellsSize [cellsEnd - cells]
 .alias codeSize [codeEnd - code]
 
@@ -112,12 +114,12 @@ _over:
 ;
 main:
 	; Set the instruction pointer to the classic hello world program.
-	lda #<printBF
-	sta iptr
-	lda #>printBF
-	sta iptr+1
-	jsr runProgram
-	brk
+	;lda #<manyOpen
+	;sta iptr
+	;lda #>manyOpen
+	;sta iptr+1
+	;jsr compile
+	;brk
 
 	lda #<printBF
 	sta iptr
@@ -140,9 +142,6 @@ main:
 	sta iptr+1
 	jsr runProgram
 	brk
-
-simple:
-	.byte "[]",0
 
 runProgram:
 	jsr compile	; translate source into executable code
@@ -324,20 +323,59 @@ processState:
 _stateSeqOpen:
 .scope
 	cmp #StateSeqOpen
-	bne _stateModCell
-
+	beq +
+	jmp _stateModCell
+*
+	; check if current cell value already loaded for Z flag check
 	lda cellCmpValid
 	bne +
 	`emitCode branchForward,branchForwardAfterLoad
 *
-	; remove return address from stack
+	; remove and save return address from stack
 	pla
 	sta temp
 	pla
 	sta temp+1
 
+	; find minimum of count and OpenCntForBranch
+	lda count+1
+	bne _atMax
+	lda #OpenCntForBranch
+	cmp count
+	bcc _atMax
+	; use count
+	lda count
+	bcs +
+_atMax:
+	lda #OpenCntForBranch
+*	sta fixup	; fixup = count*5-2
+	asl
+	asl
+	clc
+	adc fixup
+	adc #$100-2
+	sta fixup
+
 _loop:
-*	`emitCode branchForwardAfterLoad,branchForwardJumpInstruction+1
+*	`emitCode branchForwardAfterLoad,branchForwardAfterLoad+1
+	lda fixup
+	sta (dptr)
+	`incw dptr
+	
+	lda count+1
+	bne _branchOffsetGood
+	lda #OpenCntForBranch
+	cmp count
+	bcc _branchOffsetGood
+	
+	clc
+	lda fixup
+	adc #$100-5
+	sta fixup
+
+_branchOffsetGood:
+	`emitCode branchForwardJumpInstruction,branchForwardJumpInstruction+1
+
 	lda dptr+1	; push current PC for later.
 	pha
 	lda dptr
@@ -677,6 +715,12 @@ printBF:
 	.byte ">++++[>++++++<-]>-[[<+++++>>+<-]>-]<<[<]>>>>-"
 	.byte "-.<<<-.>>>-.<.<.>---.<<+++.>>>++.<<---.[>]<<."
 	.byte 0
+
+simple:
+	.byte "[]",0
+
+manyOpen:
+	.byte "[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]",0
 
 
 ; conio functions unique to each platform.
