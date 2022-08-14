@@ -317,16 +317,112 @@ _stateSeqOpen:
 
 _stateSeqClose:
 	cmp #StateSeqClose
-	beq +
-	jmp _stateModCell
-*
+	bne _stateModCell
+
 	lda #InstBEQ
 	sta branchInst
 	lda #<_stateSeqCloseBody
 	sta thunk+1
 	lda #>_stateSeqCloseBody
 	sta thunk+2
-	; fall through
+	jmp _stateSeqExecute
+
+_stateModCell:
+.scope
+	cmp #StateModCell
+	bne _stateModDptr
+	
+	lda count
+	cmp #$01
+	bne _decrement
+	; increment current cell
+	`emitCode incCell,incCellEnd
+	jmp _done
+	
+_decrement:
+	cmp #$ff
+	bne _add
+	; decrement current cell
+	`emitCode decCell,decCellEnd
+	jmp _done
+
+_add:
+	; add to current cell
+	`emitCode modCell, modCellAdd+1
+	lda count
+	jsr emitByte
+	`emitCode modCellAdd+2,modCellEnd
+	
+_done:
+	lda #0
+	sta count
+	lda #1
+	sta cellCmpValid
+	lda #StateDefault
+	sta state
+	rts
+.scend
+
+_stateModDptr:
+.scope
+	lda count+1
+	bne _decrement
+
+	; Choose most efficient way of modifying data pointer
+	lda count
+	cmp #$01
+	bne _addPosByte
+	; increment data pointer
+	`emitCode incDptr,incDptrEnd
+	jmp _done
+
+_addPosByte:
+	; add positive value < 256 to data pointer
+	`emitCode addDptrPosByte,addDptrPosByteAdd+1
+	lda count
+	jsr emitByte
+	`emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
+	jmp _done
+
+_decrement:
+	lda count+1
+	cmp #$ff
+	bne _add
+
+	lda count
+	cmp #$ff
+	bne _addNegByte
+	; decrement data pointer
+	`emitCode decDptr,decDptrEnd
+	jmp _done
+
+_addNegByte:
+	; subract negative value >= -256 from data pointer
+	`emitCode addDptrNegByte,addDptrNegByteAdd+1
+	lda count
+	jsr emitByte
+	`emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
+	jmp _done
+
+_add:
+	; add signed value to data pointer
+	`emitCode modDptr,modDptrAddLow+1
+	lda count
+	jsr emitByte
+	`emitCode modDptrAddLow+2,modDptrAddHigh+1
+	lda count+1
+	jsr emitByte
+	`emitCode modDptrAddHigh+2,modDptrEnd
+
+_done:
+	lda #0
+	sta count
+	sta count+1
+	sta cellCmpValid
+	lda #StateDefault
+	sta state
+	rts
+.scend
 
 _stateSeqExecute:
 .scope
@@ -429,103 +525,6 @@ _stateSeqCloseBody:
 	jsr emitByte
 	lda fixup+1
 	jmp emitByte	; tail call
-
-_stateModCell:
-.scope
-	cmp #StateModCell
-	bne _stateModDptr
-	
-	lda count
-	cmp #$01
-	bne _decrement
-	; increment current cell
-	`emitCode incCell,incCellEnd
-	jmp _done
-	
-_decrement:
-	cmp #$ff
-	bne _add
-	; decrement current cell
-	`emitCode decCell,decCellEnd
-	jmp _done
-
-_add:
-	; add to current cell
-	`emitCode modCell, modCellAdd+1
-	lda count
-	jsr emitByte
-	`emitCode modCellAdd+2,modCellEnd
-	
-_done:
-	lda #0
-	sta count
-	lda #1
-	sta cellCmpValid
-	lda #StateDefault
-	sta state
-	rts
-.scend
-
-_stateModDptr:
-.scope
-	lda count+1
-	bne _decrement
-
-	; Choose most efficient way of modifying data pointer
-	lda count
-	cmp #$01
-	bne _addPosByte
-	; increment data pointer
-	`emitCode incDptr,incDptrEnd
-	jmp _done
-
-_addPosByte:
-	; add positive value < 256 to data pointer
-	`emitCode addDptrPosByte,addDptrPosByteAdd+1
-	lda count
-	jsr emitByte
-	`emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
-	jmp _done
-
-_decrement:
-	lda count+1
-	cmp #$ff
-	bne _add
-
-	lda count
-	cmp #$ff
-	bne _addNegByte
-	; decrement data pointer
-	`emitCode decDptr,decDptrEnd
-	jmp _done
-
-_addNegByte:
-	; subract negative value >= -256 from data pointer
-	`emitCode addDptrNegByte,addDptrNegByteAdd+1
-	lda count
-	jsr emitByte
-	`emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
-	jmp _done
-
-_add:
-	; add signed value to data pointer
-	`emitCode modDptr,modDptrAddLow+1
-	lda count
-	jsr emitByte
-	`emitCode modDptrAddLow+2,modDptrAddHigh+1
-	lda count+1
-	jsr emitByte
-	`emitCode modDptrAddHigh+2,modDptrEnd
-
-_done:
-	lda #0
-	sta count
-	sta count+1
-	sta cellCmpValid
-	lda #StateDefault
-	sta state
-	rts
-.scend
 .scend
 
 copyCode:
