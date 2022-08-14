@@ -570,6 +570,9 @@ _loop:
 	lda dptr+1
 	cmp #>cellsEnd
 	bne _loop
+	lda dptr
+	cmp #<cellsEnd
+	bne _loop
 
 	; set the dptr back to the start of the cells.
 	lda #<cells
