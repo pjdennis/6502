@@ -117,19 +117,11 @@ _over:
 ;
 main:
 	; Set the instruction pointer to the classic hello world program.
-	;lda #<manyOpen
-	;sta iptr
-	;lda #>manyOpen
-	;sta iptr+1
-	;jsr compile
-	;brk
-
-	lda #<printBF
+	lda #<helloWorld
 	sta iptr
-	lda #>printBF
+	lda #>helloWorld
 	sta iptr+1
 	jsr runProgram
-	brk
 
 	; set the instruction pointer to the Sierpinski triangle program.
 	lda #<sierpinski
@@ -393,6 +385,25 @@ _stateSeqClose:
 	bne +
 	`emitCode branchBackward,branchBackwardAfterLoad
 *
+	; find minimum of count and BraceCntForBranch
+	lda count+1
+	bne _atMax
+	lda #BraceCntForBranch
+	cmp count
+	bcc _atMax
+	; use count
+	lda count
+	bcs +
+_atMax:
+	lda #BraceCntForBranch
+*	sta distance	; distance = count*5-2
+	asl
+	asl
+	clc
+	adc distance
+	adc #$100-2
+	sta distance
+
 	; remove and save return address from stack
 	pla
 	sta temp2
@@ -400,7 +411,24 @@ _stateSeqClose:
 	sta temp2+1
 
 _loop:
-	`emitCode branchBackwardAfterLoad,branchBackwardJumpInstruction+1
+	`emitCode branchBackwardAfterLoad,branchBackwardAfterLoad+1
+	lda distance
+	sta (dptr)
+	`incw dptr
+	
+	lda count+1
+	bne _branchOffsetGood
+	lda #BraceCntForBranch
+	cmp count
+	bcc _branchOffsetGood
+	
+	clc
+	lda distance
+	adc #$100-5
+	sta distance
+
+_branchOffsetGood:
+	`emitCode branchBackwardJumpInstruction,branchBackwardJumpInstruction+1	
 
 	pla		; get the fixup address off the stack
 	sta fixup
@@ -726,45 +754,6 @@ golden:
 	.byte "    ]<<<<[[<<]>>[-[+++<<-]+>>-]++[<<]<<<<<+>]"
 	.byte "  >[->>[[>>>[>>]+[-[->>+>>>>-[-[+++<<[-]]+>>-]++[<<]]+<<]<-]<]]>>>>>>>"
 	.byte "]",0
-
-quine:
-	.byte "->++>+++>+>+>+++>>>>>>>>>>>>>>>>>>>>>>+>+>++>+++>++>>+++>+>>>>>>>>>>>>>>>>>>>>>>"
-	.byte ">>>>>>>>>>>+>+>>+++>>>>+++>>>+++>+>>>>>>>++>+++>+++>+>+++>+>>+++>>>+++>+>++>+++>"
-	.byte ">>+>+>+>+>++>+++>+>+>>+++>>>>>>>+>+>>>+>+>++>+++>+++>+>>+++>+++>+>+++>+>++>+++>+"
-	.byte "+>>+>+>++>+++>+>+>>+++>>>+++>+>>>++>+++>+++>+>>+++>>>+++>+>+++>+>>+++>>+++>>+[[>"
-	.byte ">+[>]+>+[<]<-]>>[>]<+<+++[<]<<+]>+[>>]+++>+[+[<++++++++++++++++>-]<++++++++++.<]"
-	.byte 0
-
-quine2:
-	.byte "->++>+++>+>+>+++>>>>>>>>>>>>>>>>>>>>+>+>++>+++>++>>+++>+>>>>>>>>>>>>>>>>>>>>>>>>"
-	.byte ">>>>>>>>>+>+>>+++>>+++>>>>>+++>+>>>>>>>>>++>+++>+++>+>>+++>>>+++>+>++>+++>>>+>+>"
-	.byte "++>+++>+>+>>+++>>>>>>>+>+>>>+>+>++>+++>+++>+>>+++>>>+++>+>++>+++>++>>+>+>++>+++>"
-	.byte "+>+>>+++>>>>>+++>+>>>>>++>+++>+++>+>>+++>>>+++>+>+++>+>>+++>>+++>>++[[>>+[>]++>+"
-	.byte "+[<]<-]>+[>]<+<+++[<]<+]>+[>]++++>++[[<++++++++++++++++>-]<+++++++++.<]"
-	.byte 0
-	
-squares:
-	.byte "++++[>+++++<-]>[<+++++>-]+<+["
-	.byte "    >[>+>+<<-]++>>[<<+>>-]>>>[-]++>[-]+"
-	.byte "    >>>+[[-]++++++>>>]<<<[[<++++++++<++>>-]+<.<[>----<-]<]"
-	.byte "    <<[>>>>>[>>>[-]+++++++++<[>-<-]+++++++++>[-[<->-]+[<<<]]<[>+<-]>]<<-]<<-"
-	.byte "]",0
-
-xmasTree: ; not working - no output
-	.byte ">>>--------<,[<[>++++++++++<-]>>[<------>>-<+],]++>>++<--[<++[+>]>+<<+++<]<"
-	.byte "<[>>+[[>>+<<-]<<]>>>>[[<<+>.>-]>>]<.<<<+<<-]>>[<.>--]>.>>."
-	.byte 0
-printBF:
-	.byte ">++++[>++++++<-]>-[[<+++++>>+<-]>-]<<[<]>>>>-"
-	.byte "-.<<<-.>>>-.<.<.>---.<<+++.>>>++.<<---.[>]<<."
-	.byte 0
-
-simple:
-	.byte "[]",0
-
-manyOpen:
-	.byte "[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]",0
-
 
 ; conio functions unique to each platform.
 .alias _py65_putc	$f001	; Definitions for the py65mon emulator
