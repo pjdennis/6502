@@ -330,7 +330,7 @@ _stateSeqOpen:
 	bne +
 	`emitCode branchForward,branchForwardAfterLoad
 *
-	; Remove return address from stack
+	; remove return address from stack
 	pla
 	sta temp
 	pla
@@ -345,13 +345,16 @@ _loop:
 	
 	`addwbi dptr, 2	; skip past reserved space for jump address
 
-	`decw count
-	lda count
+	; decrement count and loop if not zero
+        lda count
+        bne +
+        dec count+1
+*	dec count
 	bne _loop
 	lda count+1
 	bne _loop
 
-	; Put return address back on stack
+	; put return address back on stack
 	lda temp+1
 	pha
 	lda temp
