@@ -331,7 +331,8 @@ _stateModCell:
 .scope
 	cmp #StateModCell
 	bne _stateModDptr
-	
+
+	; Choose most efficient way of modifying cell value
 	lda count
 	cmp #$01
 	bne _decrement
