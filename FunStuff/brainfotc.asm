@@ -35,7 +35,8 @@
 .alias StateDefault	$00	; Nothing pending
 .alias StateModCell	$01	; Collecting cell increments into delta
 .alias StateModDptr	$02	; Collecting pointer increments into delta
-.alias StateCellCmp	$03	; Current cell loaded for branch on Z flag
+.alias StateSeqOpen	$03	; Collecting sequence of open brackets
+.alias StateCellCmp	$04	; Current cell loaded for branch on Z flag
 
 .alias cellsSize [cellsEnd - cells]
 .alias codeSize [codeEnd - code]
@@ -111,11 +112,19 @@ _over:
 ;
 main:
 	; Set the instruction pointer to the classic hello world program.
-	lda #<helloWorld
+	lda #<printBF
 	sta iptr
-	lda #>helloWorld
+	lda #>printBF
 	sta iptr+1
 	jsr runProgram
+	brk
+
+	lda #<printBF
+	sta iptr
+	lda #>printBF
+	sta iptr+1
+	jsr runProgram
+	brk
 
 	; set the instruction pointer to the Sierpinski triangle program.
 	lda #<sierpinski
@@ -131,6 +140,9 @@ main:
 	sta iptr+1
 	jsr runProgram
 	brk
+
+simple:
+	.byte "[]",0
 
 runProgram:
 	jsr compile	; translate source into executable code
@@ -213,14 +225,10 @@ _incDptr:
 	jmp _next
 
 _outputCell:
-	; no longer collecting increments so emit any pending code
-	pha
-	jsr processState
-	pla
-
 	cmp #AscDot
 	bne _inputCell
 
+	jsr processState
 	`emitCode outputCell,outputCellEnd
 	lda #StateDefault
 	sta state
@@ -230,6 +238,7 @@ _inputCell:
 	cmp #AscComma
 	bne _leftBracket
 
+	jsr processState
 	`emitCode incCell,inputCellEnd
 	lda #StateDefault
 	sta state
@@ -238,37 +247,31 @@ _inputCell:
 _leftBracket:
 	cmp #AscLB
 	bne _rightBracket
-	
-	lda state
-	cmp #StateCellCmp
-	beq +
-	`emitCode branchForward,branchForwardAfterLoad
-*	`emitCode branchForwardAfterLoad,branchForwardJumpInstruction+1
-	lda dptr+1	; push current PC for later.
-	pha
-	lda dptr
-	pha
-	
-	`addwbi dptr, 2	; skip past reserved space for jump address
 
-	lda #StateCellCmp
+	lda state
+	cmp #StateSeqOpen
+	beq +
+	jsr processState
+	lda #StateSeqOpen
 	sta state
+*	`incw count
 	jmp _next
 
 _rightBracket:
 	cmp #AscRB
 	bne _debugOut
 
-	pla		; get the fixup address off the stack
-	sta fixup
-	pla
-	sta fixup+1
-
+	jsr processState
 	lda state
 	cmp #StateCellCmp
 	beq +
 	`emitCode branchBackward,branchBackwardAfterLoad
 *	`emitCode branchBackwardAfterLoad,branchBackwardJumpInstruction+1
+
+	pla		; get the fixup address off the stack
+	sta fixup
+	pla
+	sta fixup+1
 
 	lda dptr	; address of next instruction into temp
 	sta temp
@@ -298,6 +301,7 @@ _debugOut:
 	cmp #AscQues
 	bne _ignoreInput
 
+	jsr processState
 	`emitCode debugOut,debugOutEnd
 	lda #StateDefault
 	sta state
@@ -319,9 +323,52 @@ processState:
 
 _stateCellCmp:
 	cmp #StateCellCmp
-	bne _stateModCell
+	bne _stateSeqOpen
 
 	rts
+
+_stateSeqOpen:
+.scope
+	cmp #StateSeqOpen
+	bne _stateModCell
+
+	; Remove return address from stack
+	pla
+	sta temp
+	pla
+	sta temp+1
+
+;	lda state
+;	cmp #StateCellCmp
+;	beq +
+
+	`emitCode branchForward,branchForwardAfterLoad
+_loop:
+*	`emitCode branchForwardAfterLoad,branchForwardJumpInstruction+1
+	lda dptr+1	; push current PC for later.
+	pha
+	lda dptr
+	pha
+	
+	`addwbi dptr, 2	; skip past reserved space for jump address
+
+	`decw count
+	lda count
+	bne _loop
+	lda count+1
+	bne _loop
+
+	lda #StateCellCmp
+	sta state
+
+	; Put return address back on stack
+	lda temp+1
+	pha
+	lda temp
+	pha
+
+	rts	
+.scend
 
 _stateModCell:
 .scope
@@ -580,7 +627,7 @@ sierpinski:
 	.byte "-<<<["
 	.byte "->[+[-]+>++>>>-<<]<[<]>>++++++[<<+++++>>-]+<<++.[-]<<"
 	.byte "]>.>+[>>]>+"
-	.byte "]", 0
+	.byte "]",0
 
 ; Compute the "golden ratio". Because this number is infinitely long,
 ; this program doesn't terminate on its own. You will have to kill it.
@@ -595,7 +642,40 @@ golden:
 	.byte "      ]+<+[-<+<+]++>>"
 	.byte "    ]<<<<[[<<]>>[-[+++<<-]+>>-]++[<<]<<<<<+>]"
 	.byte "  >[->>[[>>>[>>]+[-[->>+>>>>-[-[+++<<[-]]+>>-]++[<<]]+<<]<-]<]]>>>>>>>"
-	.byte "]"
+	.byte "]",0
+
+quine:
+	.byte "->++>+++>+>+>+++>>>>>>>>>>>>>>>>>>>>>>+>+>++>+++>++>>+++>+>>>>>>>>>>>>>>>>>>>>>>"
+	.byte ">>>>>>>>>>>+>+>>+++>>>>+++>>>+++>+>>>>>>>++>+++>+++>+>+++>+>>+++>>>+++>+>++>+++>"
+	.byte ">>+>+>+>+>++>+++>+>+>>+++>>>>>>>+>+>>>+>+>++>+++>+++>+>>+++>+++>+>+++>+>++>+++>+"
+	.byte "+>>+>+>++>+++>+>+>>+++>>>+++>+>>>++>+++>+++>+>>+++>>>+++>+>+++>+>>+++>>+++>>+[[>"
+	.byte ">+[>]+>+[<]<-]>>[>]<+<+++[<]<<+]>+[>>]+++>+[+[<++++++++++++++++>-]<++++++++++.<]"
+	.byte 0
+
+quine2:
+	.byte "->++>+++>+>+>+++>>>>>>>>>>>>>>>>>>>>+>+>++>+++>++>>+++>+>>>>>>>>>>>>>>>>>>>>>>>>"
+	.byte ">>>>>>>>>+>+>>+++>>+++>>>>>+++>+>>>>>>>>>++>+++>+++>+>>+++>>>+++>+>++>+++>>>+>+>"
+	.byte "++>+++>+>+>>+++>>>>>>>+>+>>>+>+>++>+++>+++>+>>+++>>>+++>+>++>+++>++>>+>+>++>+++>"
+	.byte "+>+>>+++>>>>>+++>+>>>>>++>+++>+++>+>>+++>>>+++>+>+++>+>>+++>>+++>>++[[>>+[>]++>+"
+	.byte "+[<]<-]>+[>]<+<+++[<]<+]>+[>]++++>++[[<++++++++++++++++>-]<+++++++++.<]"
+	.byte 0
+	
+squares:
+	.byte "++++[>+++++<-]>[<+++++>-]+<+["
+	.byte "    >[>+>+<<-]++>>[<<+>>-]>>>[-]++>[-]+"
+	.byte "    >>>+[[-]++++++>>>]<<<[[<++++++++<++>>-]+<.<[>----<-]<]"
+	.byte "    <<[>>>>>[>>>[-]+++++++++<[>-<-]+++++++++>[-[<->-]+[<<<]]<[>+<-]>]<<-]<<-"
+	.byte "]",0
+
+xmasTree: ; not working - no output
+	.byte ">>>--------<,[<[>++++++++++<-]>>[<------>>-<+],]++>>++<--[<++[+>]>+<<+++<]<"
+	.byte "<[>>+[[>>+<<-]<<]>>>>[[<<+>.>-]>>]<.<<<+<<-]>>[<.>--]>.>>."
+	.byte 0
+printBF:
+	.byte ">++++[>++++++<-]>-[[<+++++>>+<-]>-]<<[<]>>>>-"
+	.byte "-.<<<-.>>>-.<.<.>---.<<+++.>>>++.<<---.[>]<<."
+	.byte 0
+
 
 ; conio functions unique to each platform.
 .alias _py65_putc	$f001	; Definitions for the py65mon emulator
