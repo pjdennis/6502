@@ -50,8 +50,8 @@
 .org $0080		; we'll need to use ZP addressing
 .space dptr 2		; word to hold the data pointer.
 .space iptr 2		; word to hold the instruction pointer.
+.space fixupStack 2	; word to hold fixup stack pointer.
 .space temp 2		; word to hold temporary pointer.
-.space temp2 2		; word to hold temporary pointer.
 .space fixup 2		; word to hold popped PC to fixup forward branch.
 .space cptr 2		; word to hold pointer for code to copy.
 .space ccnt 1		; byte to hold count of code to copy.
@@ -142,13 +142,18 @@ runProgram:
 	jsr compile	; translate source into executable code
 	jmp code	; directly execute the code
 
-; compile scans the characters and produces a machine code stream.
+; compile scans the characters and produces a machine code stream
 compile:
 .scope
 	lda #<code	; use dptr as the index into the code
 	sta dptr
 	lda #>code
 	sta dptr+1
+	
+	lda #<cells	; use cells as fixup stack during compilation
+	sta fixupStack
+	lda #>cells
+	sta fixupStack+1
 	
 	; Initialize parser state
 	lda #StateDefault
@@ -318,13 +323,6 @@ _atMax:
 	adc distance
 	adc #$100-2
 	sta distance
-
-	; remove and save return address from stack
-	pla
-	sta temp
-	pla
-	sta temp+1
-
 _loop:
 *	`emitCode branchForwardAfterLoad,branchForwardAfterLoad+1
 	lda distance
@@ -346,10 +344,12 @@ _branchOffsetGood:
 	`emitCode branchForwardJumpInstruction,branchForwardJumpInstruction+1
 
 	lda dptr+1	; push current PC for later.
-	pha
+	sta (fixupStack)
+	`incw fixupStack
 	lda dptr
-	pha
-	
+	sta (fixupStack)
+	`incw fixupStack
+
 	`addwbi dptr, 2	; skip past reserved space for jump address
 
 	; decrement count and loop if not zero
@@ -360,12 +360,6 @@ _branchOffsetGood:
 	bne _loop
 	lda count+1
 	bne _loop
-
-	; put return address back on stack
-	lda temp+1
-	pha
-	lda temp
-	pha
 
 	lda #1
 	sta cellCmpValid
@@ -403,13 +397,6 @@ _atMax:
 	adc distance
 	adc #$100-2
 	sta distance
-
-	; remove and save return address from stack
-	pla
-	sta temp2
-	pla
-	sta temp2+1
-
 _loop:
 	`emitCode branchBackwardAfterLoad,branchBackwardAfterLoad+1
 	lda distance
@@ -430,9 +417,12 @@ _loop:
 _branchOffsetGood:
 	`emitCode branchBackwardJumpInstruction,branchBackwardJumpInstruction+1	
 
-	pla		; get the fixup address off the stack
+	; get the fixup address off the fixup stack
+	`decw fixupStack
+	lda (fixupStack)
 	sta fixup
-	pla
+	`decw fixupStack
+	lda (fixupStack)
 	sta fixup+1
 
 	lda dptr	; address of next instruction into temp
@@ -463,12 +453,6 @@ _branchOffsetGood:
 	bne _loop
 	lda count+1
 	bne _loop
-
-	; put return address back on stack
-	lda temp2+1
-	pha
-	lda temp2
-	pha
 
 	lda #1
 	sta cellCmpValid
