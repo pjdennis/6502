@@ -308,12 +308,6 @@ _stateSeqOpen:
 	bne +
 	`emitCode branchForward,branchForwardAfterLoad
 *
-	; remove and save return address from stack
-	pla
-	sta temp
-	pla
-	sta temp+1
-
 	; find minimum of count and BraceCntForBranch
 	lda count+1
 	bne _atMax
@@ -332,6 +326,12 @@ _atMax:
 	adc distance
 	adc #$100-2
 	sta distance
+
+	; remove and save return address from stack
+	pla
+	sta temp
+	pla
+	sta temp+1
 
 _loop:
 *	`emitCode branchForwardAfterLoad,branchForwardAfterLoad+1
