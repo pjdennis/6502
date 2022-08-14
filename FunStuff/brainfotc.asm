@@ -63,6 +63,8 @@
 .space cellCmpValid 1	; current cell loaded for branch on Z flag?
 .space count 2		; cell or dptr delta or bracket count
 .space distance 1	; distance for relative branch
+.space branchInst 1	; branch instruction to use
+.space thunk 3		; for indirect subroutine calls
 
 .data BSS
 .org $0300		; page 3 is used for uninitialized data.
@@ -158,6 +160,9 @@ compile:
 	sta fixupStack
 	lda #>cells
 	sta fixupStack+1
+	
+	lda #InstJMP	; initialize thunk
+	sta thunk
 	
 	; Initialize parser state
 	lda #StateDefault
@@ -299,11 +304,32 @@ processState:
 	rts
 
 _stateSeqOpen:
-.scope
 	cmp #StateSeqOpen
+	bne _stateSeqClose
+
+	lda #InstBNE
+	sta branchInst
+	lda #<_stateSeqOpenBody
+	sta thunk+1
+	lda #>_stateSeqOpenBody
+	sta thunk+2
+	jmp _stateSeqExecute
+
+_stateSeqClose:
+	cmp #StateSeqClose
 	beq +
-	jmp _stateSeqClose
+	jmp _stateModCell
 *
+	lda #InstBEQ
+	sta branchInst
+	lda #<_stateSeqCloseBody
+	sta thunk+1
+	lda #>_stateSeqCloseBody
+	sta thunk+2
+	; fall through
+
+_stateSeqExecute:
+.scope
 	; check if current cell value already loaded for Z flag check
 	lda cellCmpValid
 	bne +
@@ -328,7 +354,7 @@ _atMax:
 	adc #$100-2
 	sta distance
 _loop:
-	lda #InstBNE
+	lda branchInst
 	jsr emitByte
 	lda distance
 	jsr emitByte
@@ -347,15 +373,8 @@ _loop:
 _branchOffsetGood:
 	lda #InstJMP
 	jsr emitByte
-
-	lda dptr+1	; push current PC for later.
-	sta (fixupStack)
-	`incw fixupStack
-	lda dptr
-	sta (fixupStack)
-	`incw fixupStack
-
-	`addwbi dptr, 2	; skip past reserved space for jump address
+	
+	jsr thunk
 
 	; decrement count and loop if not zero
         lda count
@@ -373,55 +392,18 @@ _branchOffsetGood:
 	rts	
 .scend
 
-_stateSeqClose:
-.scope
-	cmp #StateSeqClose
-	beq +
-	jmp _stateModCell
-*
-	lda cellCmpValid
-	bne +
-	`emitCode loadCellValue,loadCellValueEnd
-*
-	; find minimum of count and BraceCntForBranch
-	lda count+1
-	bne _atMax
-	lda #BraceCntForBranch
-	cmp count
-	bcc _atMax
-	; use count
-	lda count
-	bcs +
-_atMax:
-	lda #BraceCntForBranch
-*	sta distance	; distance = count*5-2
-	asl
-	asl
-	clc
-	adc distance
-	adc #$100-2
-	sta distance
-_loop:
-	lda #InstBEQ
-	jsr emitByte
-	lda distance
-	jsr emitByte
+_stateSeqOpenBody:
+	lda dptr+1	; push current PC for later.
+	sta (fixupStack)
+	`incw fixupStack
+	lda dptr
+	sta (fixupStack)
+	`incw fixupStack
 
-	lda count+1
-	bne _branchOffsetGood
-	lda #BraceCntForBranch
-	cmp count
-	bcc _branchOffsetGood
-	
-	clc
-	lda distance
-	adc #$100-5
-	sta distance
+	`addwbi dptr, 2	; skip past reserved space for jump address
+	rts
 
-_branchOffsetGood:
-	lda #InstJMP
-	jsr emitByte
-
+_stateSeqCloseBody:
 	; get the fixup address off the fixup stack
 	`decw fixupStack
 	lda (fixupStack)
@@ -446,23 +428,7 @@ _branchOffsetGood:
 	lda fixup	; store backwards jump address
 	jsr emitByte
 	lda fixup+1
-	jsr emitByte
-	
-	; decrement count and loop if not zero
-        lda count
-        bne +
-        dec count+1
-*	dec count
-	bne _loop
-	lda count+1
-	bne _loop
-
-	lda #1
-	sta cellCmpValid
-	lda #StateDefault
-	sta state
-	rts
-.scend
+	jmp emitByte	; tail call
 
 _stateModCell:
 .scope
