@@ -36,7 +36,6 @@
 .alias StateModCell	$01	; Collecting cell increments into delta
 .alias StateModDptr	$02	; Collecting pointer increments into delta
 .alias StateSeqOpen	$03	; Collecting sequence of open brackets
-.alias StateCellCmp	$04	; Current cell loaded for branch on Z flag
 
 .alias cellsSize [cellsEnd - cells]
 .alias codeSize [codeEnd - code]
@@ -53,6 +52,7 @@
 .space cptr 2		; word to hold pointer for code to copy.
 .space ccnt 1		; byte to hold count of code to copy.
 .space state 1		; current parser state
+.space cellCmpValid 1	; current cell loaded for branch on Z flag?
 .space count 2		; count cell or dptr delta
 
 .data BSS
@@ -160,6 +160,7 @@ compile:
 	lda #StateDefault
 	sta state
 	lda #0
+	sta cellCmpValid
 	sta count
 	sta count+1
 
@@ -230,8 +231,8 @@ _outputCell:
 
 	jsr processState
 	`emitCode outputCell,outputCellEnd
-	lda #StateDefault
-	sta state
+	lda #0
+	sta cellCmpValid
 	jmp _next
 
 _inputCell:
@@ -240,8 +241,8 @@ _inputCell:
 
 	jsr processState
 	`emitCode incCell,inputCellEnd
-	lda #StateDefault
-	sta state
+	lda #0
+	sta cellCmpValid
 	jmp _next
 
 _leftBracket:
@@ -262,9 +263,8 @@ _rightBracket:
 	bne _debugOut
 
 	jsr processState
-	lda state
-	cmp #StateCellCmp
-	beq +
+	lda cellCmpValid
+	bne +
 	`emitCode branchBackward,branchBackwardAfterLoad
 *	`emitCode branchBackwardAfterLoad,branchBackwardJumpInstruction+1
 
@@ -293,8 +293,8 @@ _rightBracket:
 	sta (dptr)
 	`incw dptr
 
-	lda #StateCellCmp
-	sta state
+	lda #1
+	sta cellCmpValid
 	jmp _next
 
 _debugOut:
@@ -303,8 +303,8 @@ _debugOut:
 
 	jsr processState
 	`emitCode debugOut,debugOutEnd
-	lda #StateDefault
-	sta state
+	lda #0
+	sta cellCmpValid
 	jmp _next
 
 _ignoreInput:		; all other characters are ignored
@@ -317,12 +317,6 @@ processState:
 .scope
 	lda state
 	cmp #StateDefault
-	bne _stateCellCmp
-
-	rts
-
-_stateCellCmp:
-	cmp #StateCellCmp
 	bne _stateSeqOpen
 
 	rts
@@ -332,17 +326,16 @@ _stateSeqOpen:
 	cmp #StateSeqOpen
 	bne _stateModCell
 
+	lda cellCmpValid
+	bne +
+	`emitCode branchForward,branchForwardAfterLoad
+*
 	; Remove return address from stack
 	pla
 	sta temp
 	pla
 	sta temp+1
 
-;	lda state
-;	cmp #StateCellCmp
-;	beq +
-
-	`emitCode branchForward,branchForwardAfterLoad
 _loop:
 *	`emitCode branchForwardAfterLoad,branchForwardJumpInstruction+1
 	lda dptr+1	; push current PC for later.
@@ -358,14 +351,16 @@ _loop:
 	lda count+1
 	bne _loop
 
-	lda #StateCellCmp
-	sta state
-
 	; Put return address back on stack
 	lda temp+1
 	pha
 	lda temp
 	pha
+
+	lda #1
+	sta cellCmpValid
+	lda #StateDefault
+	sta state
 
 	rts	
 .scend
@@ -400,7 +395,9 @@ _add:
 _done:
 	lda #0
 	sta count
-	lda #StateCellCmp
+	lda #1
+	sta cellCmpValid
+	lda #StateDefault
 	sta state
 	rts
 .scend
@@ -464,6 +461,8 @@ _done:
 	lda #0
 	sta count
 	sta count+1
+	lda #0
+	sta cellCmpValid
 	lda #StateDefault
 	sta state
 	rts
