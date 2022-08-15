@@ -1,5 +1,6 @@
 ; Extra sample code (can be copy-pasted into a bf implementation
 
+; from https://gist.github.com/danielcristofani/51d8945b778eca6f296f7438f33dd885
 life:
 	.byte ">>>->+>+++++>(++++++++++)[[>>>+<<<-]>+++++>+>>+[<<+>>>>>+<<<-]<-]>>>>["
 	.byte "  [>>>+>+<<<<-]+++>>+[<+>>>+>+<<<-]>>[>[[>>>+<<<-]<]<<++>+>>>>>>-]<-"
