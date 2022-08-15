@@ -12,12 +12,16 @@
 ; impementation than the prior versions.
 ;
 ; These optimizations further increase the speed:
+; * [ and ] jump to the instruction following the matching brace, instead of
+;   jumping to the matching brace which would needlessly retest the value of
+;  the current cell
 ; * Multiple consecutive increments/decrements to cell values or to the data
 ;   pointer are consolidated into a single addition. The most efficient way of
 ;   updating the cell value or pointer is chosen based on the magnatude of the
 ;   consolidated value
 ; * The compiler keeps track of when the current cell value is reflected in the
-;   Z flag so as to avoid reloading the current cell value unnecessarily
+;   Z flag so as to avoid reloading the current cell value unnecessarily prior
+;   to [ or ]
 ; * Multiple consecutive [ or ] commands are consolidated so that flow of
 ;   control jumps directly past the group of commands vs. retesting the same
 ;   condition multiple times

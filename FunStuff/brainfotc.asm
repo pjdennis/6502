@@ -12,6 +12,9 @@
 ; impementation than the prior versions.
 ;
 ; These optimizations further increase the speed:
+; * [ and ] jump to the instruction following the matching brace, instead of
+;   jumping to the matching brace which would needlessly retest the value of
+;  the current cell
 ; * Multiple consecutive increments/decrements to cell values or to the data
 ;   pointer are consolidated into a single addition. The most efficient way of
 ;   updating the cell value or pointer is chosen based on the magnatude of the
