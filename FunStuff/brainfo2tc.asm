@@ -16,11 +16,11 @@
 ;   pointer are consolidated into a single addition. The most efficient way of
 ;   updating the cell value or pointer is chosen based on the magnatude of the
 ;   consolidated value
+; * The compiler keeps track of when the current cell value is reflected in the
+;   Z flag so as to avoid reloading the current cell value unnecessarily
 ; * Multiple consecutive [ or ] commands are consolidated so that flow of
 ;   control jumps directly past the group of commands vs. retesting the same
 ;   condition multiple times
-; * The compiler keeps track of when the current cell value is reflected in the
-;   Z flag so as to avoid reloading the current cell value unnecessarily
 ;
 ; Derived from prior version by Martin Heermance <mheermance@gmail.com>
 ;
