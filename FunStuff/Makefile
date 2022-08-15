@@ -48,6 +48,12 @@ brainfotc.rom: brainfotc.asm
 brainfotcDebug: brainfotc.rom
 	${PY65MON} -m 65C02 -r brainfotc.rom
 
+brainfo2tc.rom: brainfo2tc.asm
+	${OPHIS} -l brainfo2tc.lst -m brainfo2tc.map --65c02 brainfo2tc.asm
+
+brainfo2tcDebug: brainfo2tc.rom
+	${PY65MON} -m 65C02 -r brainfo2tc.rom
+
 life.rom: life.asm
 	${OPHIS} -l life.lst -m life.map --65c02 life.asm
 

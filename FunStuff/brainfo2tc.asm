@@ -9,8 +9,18 @@
 ; This version of the Brain f--k compiler compiles programs into 6502 machine
 ; code. When executed the machine code uses the underlying hardware as the code
 ; threading mechanism. Eliminating function calls creates a faster Brain f--k
-; impementation than the prior versions. Optimizations further increase the
-; speed.
+; impementation than the prior versions.
+;
+; These optimizations further increase the speed:
+; * Multiple consecutive increments/decrements to cell values or to the data
+;   pointer are consolidated into a single addition. The most efficient way of
+;   updating the cell value or pointer is chosen based on the magnatude of the
+;   consolidated value
+; * Multiple consecutive [ or ] commands are consolidated so that flow of
+;   control jumps directly past the group of commands vs. retesting the same
+;   condition multiple times
+; * The compiler keeps track of when the current cell value is reflected in the
+;   Z flag so as to avoid reloading the current cell value unnecessarily
 ;
 ; Derived from prior version by Martin Heermance <mheermance@gmail.com>
 ;
@@ -32,10 +42,17 @@
 .alias AscLB	$5B
 .alias AscRB	$5D
 
+.alias InstBNE	$D0
+.alias InstBEQ	$F0
+.alias InstJMP	$4C
+
 .alias StateDefault	$00	; Nothing pending
 .alias StateModCell	$01	; Collecting cell increments into delta
 .alias StateModDptr	$02	; Collecting pointer increments into delta
-.alias StateCellCmp	$03	; Current cell loaded for branch on Z flag
+.alias StateSeqOpen	$03	; Collecting sequence of open brackets
+.alias StateSeqClose	$04	; Collecting sequence of close brackets
+
+.alias BraceCntForBranch	25	; 25 * 5 instructions - 2 <= 127
 
 .alias cellsSize [cellsEnd - cells]
 .alias codeSize [codeEnd - code]
@@ -47,12 +64,17 @@
 .org $0080		; we'll need to use ZP addressing
 .space dptr 2		; word to hold the data pointer.
 .space iptr 2		; word to hold the instruction pointer.
+.space fixupStack 2	; word to hold fixup stack pointer.
 .space temp 2		; word to hold temporary pointer.
 .space fixup 2		; word to hold popped PC to fixup forward branch.
 .space cptr 2		; word to hold pointer for code to copy.
 .space ccnt 1		; byte to hold count of code to copy.
 .space state 1		; current parser state
-.space count 2		; count cell or dptr delta
+.space cellCmpValid 1	; current cell loaded for branch on Z flag?
+.space count 2		; cell or dptr delta or bracket count
+.space distance 1	; distance for relative branch
+.space branchInst 1	; branch instruction to use
+.space thunk 3		; for indirect subroutine calls
 
 .data BSS
 .org $0300		; page 3 is used for uninitialized data.
@@ -103,7 +125,7 @@ _over:
 .macend
 
 .org $8000
-.outfile "brainfotc.rom"
+.outfile "brainfo2tc.rom"
 .advance $8000
 
 ;
@@ -136,7 +158,7 @@ runProgram:
 	jsr compile	; translate source into executable code
 	jmp code	; directly execute the code
 
-; compile scans the characters and produces a machine code stream.
+; compile scans the characters and produces a machine code stream
 compile:
 .scope
 	lda #<code	; use dptr as the index into the code
@@ -144,10 +166,19 @@ compile:
 	lda #>code
 	sta dptr+1
 	
+	lda #<cells	; use cells as fixup stack during compilation
+	sta fixupStack
+	lda #>cells
+	sta fixupStack+1
+	
+	lda #InstJMP	; initialize thunk
+	sta thunk
+	
 	; Initialize parser state
 	lda #StateDefault
 	sta state
 	lda #0
+	sta cellCmpValid
 	sta count
 	sta count+1
 
@@ -213,94 +244,59 @@ _incDptr:
 	jmp _next
 
 _outputCell:
-	; no longer collecting increments so emit any pending code
-	pha
-	jsr processState
-	pla
-
 	cmp #AscDot
 	bne _inputCell
 
+	jsr processState
 	`emitCode outputCell,outputCellEnd
-	lda #StateDefault
-	sta state
+	lda #0
+	sta cellCmpValid
 	jmp _next
 
 _inputCell:
 	cmp #AscComma
 	bne _leftBracket
 
+	jsr processState
 	`emitCode incCell,inputCellEnd
-	lda #StateDefault
-	sta state
+	lda #0
+	sta cellCmpValid
 	jmp _next
 
 _leftBracket:
 	cmp #AscLB
 	bne _rightBracket
-	
-	lda state
-	cmp #StateCellCmp
-	beq +
-	`emitCode branchForward,branchForwardAfterLoad
-*	`emitCode branchForwardAfterLoad,branchForwardJumpInstruction+1
-	lda dptr+1	; push current PC for later.
-	pha
-	lda dptr
-	pha
-	
-	`addwbi dptr, 2	; skip past reserved space for jump address
 
-	lda #StateCellCmp
+	lda state
+	cmp #StateSeqOpen
+	beq +
+	jsr processState
+	lda #StateSeqOpen
 	sta state
+*	`incw count
 	jmp _next
 
 _rightBracket:
 	cmp #AscRB
 	bne _debugOut
-
-	pla		; get the fixup address off the stack
-	sta fixup
-	pla
-	sta fixup+1
-
-	lda state
-	cmp #StateCellCmp
-	beq +
-	`emitCode branchBackward,branchBackwardAfterLoad
-*	`emitCode branchBackwardAfterLoad,branchBackwardJumpInstruction+1
-
-	lda dptr	; address of next instruction into temp
-	sta temp
-	lda dptr+1
-	sta temp+1
-	`addwbi temp,2
 	
-	lda temp	; fixup jump address for left bracket
-	sta (fixup)
-	`incw fixup
-	lda temp+1
-	sta (fixup)
-	`incw fixup
-
-	lda fixup	; store backwards jump address
-	sta (dptr)
-	`incw dptr
-	lda fixup+1
-	sta (dptr)
-	`incw dptr
-
-	lda #StateCellCmp
+	lda state
+	cmp #StateSeqClose
+	beq +
+	jsr processState
+	lda #StateSeqClose
 	sta state
+*	`incw count
 	jmp _next
 
 _debugOut:
 	cmp #AscQues
 	bne _ignoreInput
 
+	jsr processState
 	`emitCode debugOut,debugOutEnd
-	lda #StateDefault
-	sta state
+	lda #0
+	sta cellCmpValid
 	jmp _next
 
 _ignoreInput:		; all other characters are ignored
@@ -313,21 +309,40 @@ processState:
 .scope
 	lda state
 	cmp #StateDefault
-	bne _stateCellCmp
+	bne _stateSeqOpen
 
 	rts
 
-_stateCellCmp:
-	cmp #StateCellCmp
+_stateSeqOpen:
+	cmp #StateSeqOpen
+	bne _stateSeqClose
+
+	lda #InstBNE
+	sta branchInst
+	lda #<_stateSeqOpenBody
+	sta thunk+1
+	lda #>_stateSeqOpenBody
+	sta thunk+2
+	jmp _stateSeqExecute
+
+_stateSeqClose:
+	cmp #StateSeqClose
 	bne _stateModCell
 
-	rts
+	lda #InstBEQ
+	sta branchInst
+	lda #<_stateSeqCloseBody
+	sta thunk+1
+	lda #>_stateSeqCloseBody
+	sta thunk+2
+	jmp _stateSeqExecute
 
 _stateModCell:
 .scope
 	cmp #StateModCell
 	bne _stateModDptr
-	
+
+	; Choose most efficient way of modifying cell value
 	lda count
 	cmp #$01
 	bne _decrement
@@ -346,14 +361,15 @@ _add:
 	; add to current cell
 	`emitCode modCell, modCellAdd+1
 	lda count
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	`emitCode modCellAdd+2,modCellEnd
 	
 _done:
 	lda #0
 	sta count
-	lda #StateCellCmp
+	lda #1
+	sta cellCmpValid
+	lda #StateDefault
 	sta state
 	rts
 .scend
@@ -375,8 +391,7 @@ _addPosByte:
 	; add positive value < 256 to data pointer
 	`emitCode addDptrPosByte,addDptrPosByteAdd+1
 	lda count
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	`emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
 	jmp _done
 
@@ -396,8 +411,7 @@ _addNegByte:
 	; subract negative value >= -256 from data pointer
 	`emitCode addDptrNegByte,addDptrNegByteAdd+1
 	lda count
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	`emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
 	jmp _done
 
@@ -405,22 +419,123 @@ _add:
 	; add signed value to data pointer
 	`emitCode modDptr,modDptrAddLow+1
 	lda count
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	`emitCode modDptrAddLow+2,modDptrAddHigh+1
 	lda count+1
-	sta (dptr)
-	`incw dptr
+	jsr emitByte
 	`emitCode modDptrAddHigh+2,modDptrEnd
 
 _done:
 	lda #0
 	sta count
 	sta count+1
+	sta cellCmpValid
 	lda #StateDefault
 	sta state
 	rts
 .scend
+
+_stateSeqExecute:
+.scope
+	; check if current cell value already loaded for Z flag check
+	lda cellCmpValid
+	bne +
+	`emitCode loadCellValue,loadCellValueEnd
+*
+	; find minimum of count and BraceCntForBranch
+	lda count+1
+	bne _atMax
+	lda #BraceCntForBranch
+	cmp count
+	bcc _atMax
+	; use count
+	lda count
+	bcs +
+_atMax:
+	lda #BraceCntForBranch
+*	sta distance	; distance = count*5-2
+	asl
+	asl
+	clc
+	adc distance
+	adc #$100-2
+	sta distance
+_loop:
+	lda branchInst
+	jsr emitByte
+	lda distance
+	jsr emitByte
+	
+	lda count+1
+	bne _branchOffsetGood
+	lda #BraceCntForBranch
+	cmp count
+	bcc _branchOffsetGood
+	
+	clc
+	lda distance
+	adc #$100-5
+	sta distance
+
+_branchOffsetGood:
+	lda #InstJMP
+	jsr emitByte
+	
+	jsr thunk
+
+	; decrement count and loop if not zero
+        lda count
+        bne +
+        dec count+1
+*	dec count
+	bne _loop
+	lda count+1
+	bne _loop
+
+	lda #1
+	sta cellCmpValid
+	lda #StateDefault
+	sta state
+	rts	
+.scend
+
+_stateSeqOpenBody:
+	lda dptr+1	; push current PC for later.
+	sta (fixupStack)
+	`incw fixupStack
+	lda dptr
+	sta (fixupStack)
+	`incw fixupStack
+
+	`addwbi dptr, 2	; skip past reserved space for jump address
+	rts
+
+_stateSeqCloseBody:
+	; get the fixup address off the fixup stack
+	`decw fixupStack
+	lda (fixupStack)
+	sta fixup
+	`decw fixupStack
+	lda (fixupStack)
+	sta fixup+1
+
+	lda dptr	; address of next instruction into temp
+	sta temp
+	lda dptr+1
+	sta temp+1
+	`addwbi temp,2
+	
+	lda temp	; fixup jump address for left bracket
+	sta (fixup)
+	`incw fixup
+	lda temp+1
+	sta (fixup)
+	`incw fixup
+
+	lda fixup	; store backwards jump address
+	jsr emitByte
+	lda fixup+1
+	jmp emitByte	; tail call
 .scend
 
 copyCode:
@@ -431,8 +546,12 @@ _loop:
 	`incw dptr
 	dec ccnt
 	bne _loop
-	
 	rts
+
+emitByte:
+	sta (dptr)
+	`incw dptr
+	rts;
 
 ;
 ; These secions of code function as the threaded code to execute programs.
@@ -450,6 +569,9 @@ _loop:
 	`incw dptr
 	lda dptr+1
 	cmp #>cellsEnd
+	bne _loop
+	lda dptr
+	cmp #<cellsEnd
 	bne _loop
 
 	; set the dptr back to the start of the cells.
@@ -532,21 +654,9 @@ inputCell:
 	sta (dptr)
 inputCellEnd:
 
-branchForward:
+loadCellValue:
 	lda (dptr)
-branchForwardAfterLoad:
-	bne +		; Branch on data cell containing zero
-branchForwardJumpInstruction:
-	jmp 0		; placeholder
-*
-
-branchBackward:
-	lda (dptr)
-branchBackwardAfterLoad:
-	beq +		; Branch on data cell containing zero
-branchBackwardJumpInstruction:
-	jmp 0		; placeholder
-*
+loadCellValueEnd:
 
 debugOut:
 	brk		; unimplemented for now
@@ -580,7 +690,7 @@ sierpinski:
 	.byte "-<<<["
 	.byte "->[+[-]+>++>>>-<<]<[<]>>++++++[<<+++++>>-]+<<++.[-]<<"
 	.byte "]>.>+[>>]>+"
-	.byte "]", 0
+	.byte "]",0
 
 ; Compute the "golden ratio". Because this number is infinitely long,
 ; this program doesn't terminate on its own. You will have to kill it.
@@ -595,7 +705,7 @@ golden:
 	.byte "      ]+<+[-<+<+]++>>"
 	.byte "    ]<<<<[[<<]>>[-[+++<<-]+>>-]++[<<]<<<<<+>]"
 	.byte "  >[->>[[>>>[>>]+[-[->>+>>>>-[-[+++<<[-]]+>>-]++[<<]]+<<]<-]<]]>>>>>>>"
-	.byte "]"
+	.byte "]",0
 
 ; conio functions unique to each platform.
 .alias _py65_putc	$f001	; Definitions for the py65mon emulator
