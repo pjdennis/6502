@@ -79,9 +79,13 @@
 .space distance 1	; distance for relative branch
 .space branchInst 1	; branch instruction to use
 .space thunk 3		; for indirect subroutine calls
+.space bufferReadPos 2	; input buffer read position
+.space bufferWritePos 2 ; input buffer write position
 
 .data BSS
 .org $0300		; page 3 is used for uninitialized data.
+.space inputBuffer 256	; whole page buffer for inputting line at a time
+
 .space cells 1024	; cells is currently 1K
 .space cellsEnd 0
 
@@ -136,26 +140,36 @@ _over:
 ; Functions
 ;
 main:
+	jsr _initializeInputBuffer
+
 	; Set the instruction pointer to the classic hello world program.
-	lda #<helloWorld
-	sta iptr
-	lda #>helloWorld
-	sta iptr+1
-	jsr runProgram
+	;lda #<helloWorld
+	;sta iptr
+	;lda #>helloWorld
+	;sta iptr+1
+	;jsr runProgram
 
 	; set the instruction pointer to the Sierpinski triangle program.
-	lda #<sierpinski
+	;lda #<sierpinski
+	;sta iptr
+	;lda #>sierpinski
+	;sta iptr+1
+	;jsr runProgram
+
+	; set the instruction pointer to the Golden ratio program.
+	;lda #<golden
+	;sta iptr
+	;lda #>golden
+	;sta iptr+1
+	;jsr runProgram
+
+	; set the instruction pointer to the Conway game of life program.
+	lda #<life
 	sta iptr
-	lda #>sierpinski
+	lda #>life
 	sta iptr+1
 	jsr runProgram
 
-	; set the instruction pointer to the Golden ratio program.
-	lda #<golden
-	sta iptr
-	lda #>golden
-	sta iptr+1
-	jsr runProgram
 	brk
 
 runProgram:
@@ -654,7 +668,7 @@ outputCell:
 outputCellEnd:
 
 inputCell:
-	jsr _getch
+	jsr _getchar
 	sta (dptr)
 inputCellEnd:
 
@@ -710,6 +724,85 @@ golden:
 	.byte "    ]<<<<[[<<]>>[-[+++<<-]+>>-]++[<<]<<<<<+>]"
 	.byte "  >[->>[[>>>[>>]+[-[->>+>>>>-[-[+++<<[-]]+>>-]++[<<]]+<<]<-]<]]>>>>>>>"
 	.byte "]",0
+
+life:
+	.byte ">>>->+>+++++>(++++++++++)[[>>>+<<<-]>+++++>+>>+[<<+>>>>>+<<<-]<-]>>>>["
+	.byte "  [>>>+>+<<<<-]+++>>+[<+>>>+>+<<<-]>>[>[[>>>+<<<-]<]<<++>+>>>>>>-]<-"
+	.byte "]+++>+>[[-]<+<[>+++++++++++++++++<-]<+]>>["
+	.byte "  [+++++++++brainfuck.org-------->>>]+[-<<<]>>>[>>,----------[>]<]<<["
+	.byte "    <<<["
+	.byte "      >--[<->>+>-<<-]<[[>>>]+>-[+>>+>-]+[<<<]<-]>++>[<+>-]"
+	.byte "      >[[>>>]+[<<<]>>>-]+[->>>]<-[++>]>[------<]>+++[<<<]>"
+	.byte "    ]<"
+	.byte "  ]>["
+	.byte "    -[+>>>-]+>>>>>>[<+<<]>->>["
+	.byte "      >[->+>+++>>++[>>>]+++<<<++<<<++[>>>]>>>]<<<[>[>>>]+>>>]"
+	.byte "      <<<<<<<[<<++<+[-<<<+]->++>>>++>>>++<<<<]<<<+[-<<<+]+>->>->>"
+	.byte "    ]<<+<<+<<<+<<-[+<+<<-]+<+["
+	.byte "      ->+>[-<-<<[<<<]>[>>[>>>]<<+<[<<<]>-]]"
+	.byte "      <[<[<[<<<]>+>>[>>>]<<-]<[<<<]]>>>->>>[>>>]+>"
+	.byte "    ]>+[-<<[-]<]-["
+	.byte "      [>>>]<[<<[<<<]>>>>>+>[>>>]<-]>>>[>[>>>]<<<<+>[<<<]>>-]>"
+	.byte "    ]<<<<<<[---<-----[-[-[<->>+++<+++++++[-]]]]<+<+]>"
+	.byte "  ]>>"
+	.byte "]"
+	.byte 0
+
+; Initialize the input buffer
+_initializeInputBuffer:
+	lda #<inputBuffer
+	sta bufferReadPos
+	sta bufferWritePos
+	lda #>inputBuffer
+	sta bufferReadPos+1
+	sta bufferWritePos+1
+	rts
+
+; buffer characters until newline and then return all characters
+; backspace will remove last character from buffer
+; echo characters as they are entered
+_getchar:
+.scope
+	lda bufferReadPos
+	cmp bufferWritePos
+	bne _returnValue	; buffer not empty
+_loop:
+	jsr _getch
+	cmp #8			; backspace
+	bne _notBackspace
+	; handle backspace
+	lda bufferReadPos
+	cmp bufferWritePos
+	beq _loop		; buffer empty so nothing to do
+	dec bufferWritePos	; remove last character from buffer
+	lda #8			; delete last character
+	jsr _putch
+	lda #32
+	jsr _putch
+	lda #8
+	jsr _putch
+	jmp _loop		; backspace handled
+_notBackspace:
+	sta (bufferWritePos)
+	cmp #10			; newline
+	bne _notNewline
+	jsr _putch
+	inc bufferWritePos
+	jmp _returnValue
+_notNewline:
+	lda bufferWritePos
+	inc
+	cmp bufferReadPos
+	beq _loop		; ignore input if buffer full
+	lda (bufferWritePos)
+	jsr _putch
+	inc bufferWritePos
+	jmp _loop
+_returnValue:
+	lda (bufferReadPos)
+	inc bufferReadPos
+	rts
+.scend
 
 ; conio functions unique to each platform.
 .alias _py65_putc	$f001	; Definitions for the py65mon emulator
