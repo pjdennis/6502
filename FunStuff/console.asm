@@ -1,7 +1,14 @@
-; Requires:
-;   bufferReadPos	  2 bytes in zero page for input buffer read position
-;   bufferWritePos	  2 bytes in zero page for input buffer write position
-;   inputBuffer		256 bytes page aligned for input buffer
+;
+; Data segments
+;
+.data ZPDATA
+.space bufferReadPos 2	; input buffer read position
+.space bufferWritePos 2 ; input buffer write position
+
+.data BSS
+.space inputBuffer 256	; whole page buffer for inputting line at a time
+
+.text
 
 ; Initialize the input buffer
 _initializeInputBuffer:

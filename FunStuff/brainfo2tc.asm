@@ -79,13 +79,17 @@
 .space distance 1	; distance for relative branch
 .space branchInst 1	; branch instruction to use
 .space thunk 3		; for indirect subroutine calls
-.space bufferReadPos 2	; input buffer read position
-.space bufferWritePos 2 ; input buffer write position
+
+.text
+.org $8000
+.outfile "brainfo2tc.rom"
 
 .data BSS
 .org $0300		; page 3 is used for uninitialized data.
-.space inputBuffer 256	; whole page buffer for inputting line at a time
 
+.include "console.asm"	; requires BSS is page aligned
+
+.data BSS
 .space cells 1024	; cells is currently 1K
 .space cellsEnd 0
 
@@ -131,11 +135,6 @@ _over:
 	sta ccnt
 	jsr copyCode
 .macend
-
-.org $8000
-.outfile "brainfo2tc.rom"
-.advance $8000
-.include "console.asm"
 
 ;
 ; Functions
