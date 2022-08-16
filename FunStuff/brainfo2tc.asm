@@ -761,6 +761,7 @@ _initializeInputBuffer:
 ; buffer characters until newline and then return all characters
 ; backspace will remove last character from buffer
 ; echo characters as they are entered
+; ignore additional typed characters once buffer is full
 _getchar:
 .scope
 	lda bufferReadPos
