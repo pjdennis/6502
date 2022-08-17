@@ -188,6 +188,7 @@ _decCell:
 	cmp #AscMinus
 	bne _decDptr
 
+	lda state
 	cmp #StateModCell
 	beq +
 	jsr processState
